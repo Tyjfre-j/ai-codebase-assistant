@@ -1,0 +1,69 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+sdist/
+
+# ── Environment & secrets ─────────────────────────────────
+.env
+.env.*
+!.env.example        
+
+# ── Data stores ───────────────────────────────────────────
+chroma_store/
+graph_store/
+qdrant_storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# ── ML model cache ───────────────────
+.cache/
+huggingface/
+~/.cache/huggingface/
+/models/
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+Thumbs.db
+desktop.ini
+
+# ── Test & tool cache ─────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Temp repo clones ───────────────
+onboard_*/
+tmp/
+temp/
+
