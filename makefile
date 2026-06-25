@@ -1,4 +1,4 @@
-.PHONY: dev test lint typecheck clean
+.PHONY: dev test lint lint-fix typecheck clean
 
 dev:
 	uvicorn app.main:app --reload --reload-dir app
@@ -9,8 +9,14 @@ test:
 lint:
 	ruff check app/
 
+lint-fix:
+	ruff check app/ --fix
+
 typecheck:
 	mypy app/
 
 clean:
-	powershell -Command "Get-ChildItem -Path . -Recurse -Force | Where-Object { $$_.PSIsContainer -and $$_.Name -in '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache' } | Remove-Item -Recurse -Force"
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null; \
+	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null; \
+	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null
