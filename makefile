@@ -4,7 +4,7 @@ dev:
 	uvicorn app.main:app --reload --reload-dir app
 
 test:
-	pytest tests/ -v
+	pytest tests/ -v -s
 
 lint:
 	ruff check app/
