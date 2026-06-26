@@ -71,7 +71,7 @@ def _validate_repo_url(repo_url: str, allowed_hosts: list[str]) -> None:
     ip = ipaddress.ip_address(ip_str)
     if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
         raise InvalidRepositoryURLError(
-            f"Host '{host}' resolves to a private IP address: {ip_str}"
+            f"Host '{host}' resolves to a blocked IP address: {ip_str}"
         )
     
 def _validate_ref(ref: str) -> None:
