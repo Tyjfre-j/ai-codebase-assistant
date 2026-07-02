@@ -1,9 +1,15 @@
 from dataclasses import dataclass
 
 import tree_sitter_python as tspython
+import tree_sitter_go as tsgo
+import tree_sitter_typescript as tsts
+import tree_sitter_javascript as tsjs
 from tree_sitter import Language, Query
 
 from app.ingestion.languages.python_queries import PYTHON_QUERY
+from app.ingestion.languages.go_queries import GO_QUERY
+from app.ingestion.languages.typescript_queries import TS_QUERY
+from app.ingestion.languages.javascript_queries import JS_QUERY
 
 
 @dataclass
@@ -17,8 +23,11 @@ def load_languages() -> dict[str, LanguageConfig]:
     specs = [
         # (extension, name, loader_function, query_string)
         (".py", "python", tspython.language, PYTHON_QUERY),
+        (".go", "go", tsgo.language, GO_QUERY),
+        (".ts", "typescript", tsts.language_typescript, TS_QUERY),
+        (".js", "javascript", tsjs.language, JS_QUERY),
     ]
-
+    
     configs: dict[str, LanguageConfig] = {}
 
     for ext, name, loader_fn, query_str in specs:
