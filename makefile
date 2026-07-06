@@ -1,19 +1,19 @@
 .PHONY: dev test lint lint-fix typecheck clean
 
 dev:
-	uvicorn app.main:app --reload --reload-dir app
+	uv run uvicorn app.main:app --reload --reload-dir app
 
 test:
-	pytest tests/ -v -s
+	uv run pytest tests/ -v -s
 
 lint:
-	ruff check app/
+	uv run ruff check app/
 
 lint-fix:
-	ruff check app/ --fix
+	uv run ruff check app/ --fix
 
 typecheck:
-	mypy app/
+	uv run mypy app/
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
