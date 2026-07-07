@@ -24,31 +24,31 @@ JS_QUERY = """
   (import_clause
     (named_imports
       (import_specifier
-        name: (identifier) @import.name
+        name: (identifier) @import.bound_name
         alias: (identifier)? @import.alias
       )
     )
   )
-  source: (string) @import.source
+  source: (string) @import.module
 ) @import.stmt
 
 (import_statement
   (import_clause
-    (identifier) @import.default
+    (identifier) @import.bound_name
   )
-  source: (string) @import.source
+  source: (string) @import.module
 ) @import.stmt
 
 (import_statement
   (import_clause
     (namespace_import
-      (identifier) @import.namespace
+      (identifier) @import.bound_name
     )
   )
-  source: (string) @import.source
+  source: (string) @import.module
 ) @import.stmt
 
 (import_statement
-  "import" . source: (string) @import.source
+  "import" . source: (string) @import.module
 ) @import.stmt
 """
