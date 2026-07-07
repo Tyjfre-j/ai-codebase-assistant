@@ -7,3 +7,4 @@ ALLOWED_REPOSITORY_HOSTS: list[str] = os.getenv(
     "github.com,gitlab.com",
 ).split(",")
 MAX_REF_LENGTH: int = 254
+MAX_FILE_SIZE_MB_FOR_PARSING = int = 1
