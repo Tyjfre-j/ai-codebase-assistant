@@ -10,6 +10,7 @@ class ChunkType(str, Enum):
     CLASS = "class"
     IMPORT = "import"
     MODULE_LEVEL = "module_level"
+    FILE_SUMMARY = "file_summary"
 
 
 @dataclass(frozen=True)
