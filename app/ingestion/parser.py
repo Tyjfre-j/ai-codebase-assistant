@@ -23,6 +23,7 @@ from app.ingestion.languages.typescript_queries import TS_QUERY
 class LanguageConfig:
     name: str
     language: Language
+    parser: Parser
     query: Query
 
 
@@ -47,10 +48,11 @@ def load_languages() -> dict[str, LanguageConfig]:
     for ext, name, loader_fn, query_str in specs:
         try:
             lang = Language(loader_fn())
+            parser = Parser(lang)
             query = Query(lang, query_str)
         except Exception as e:
             raise LanguageLoadError(f"Failed to load language for extension {ext}: {e}") from e
-        configs[ext] = LanguageConfig(name=name, language=lang, query=query)
+        configs[ext] = LanguageConfig(name=name, language=lang, parser=parser, query=query)
     return configs
 
 
@@ -76,7 +78,7 @@ class CodeParser:
             raise RuntimeError(f"Unexpected missing language config for {file_path}")
 
         try:
-            tree = Parser(lang_config.language).parse(content)
+            tree = lang_config.parser.parse(content)
         except Exception as e:
             raise TreeSitterParseError(f"Tree-sitter failed to parse {file_path}: {e}") from e
 
