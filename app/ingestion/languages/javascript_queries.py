@@ -52,3 +52,31 @@ JS_QUERY = """
   "import" . source: (string) @import.module
 ) @import.stmt
 """
+
+CLASS_NODE_TYPES = {"class_declaration"}
+WRAPPER_TYPES = {"function_declaration"}  # arrow functions/methods aren't re-parseable standalone wrappers the same way
+
+
+def resolve_definition_node(def_node):
+    """JS has no decorator-wrapper node equivalent to Python's — nothing to unwrap."""
+    return def_node
+
+
+def get_member_info(node, content: bytes):
+    """Best-effort: JS decorators are a newer/unstable grammar feature — verify on the
+    playground for your actual grammar version before trusting the decorator extraction here."""
+    from app.ingestion.chunk_builder_helpers import node_text
+
+    if node.type != "method_definition":
+        return None
+
+    name = node_text(node.child_by_field_name("name"), content)
+    params = node_text(node.child_by_field_name("parameters"), content)
+    is_async = any(c.type == "async" for c in node.children)
+    decorators = [node_text(c, content) for c in node.children if c.type == "decorator"]
+    return {
+        "name": name,
+        "params": params,
+        "decorators": decorators,
+        "prefix": "async" if is_async else "",
+    }
