@@ -2,31 +2,31 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-import tree_sitter_python as tspython
 import tree_sitter_go as tsgo
-import tree_sitter_typescript as tsts
 import tree_sitter_javascript as tsjs
-from tree_sitter import Language, Query, Parser, Tree
+import tree_sitter_python as tspython
+import tree_sitter_typescript as tsts
+from tree_sitter import Language, Parser, Query, Tree
 
-from app.ingestion.languages.python_queries import PYTHON_QUERY
-from app.ingestion.languages.go_queries import GO_QUERY
-from app.ingestion.languages.typescript_queries import TS_QUERY
-from app.ingestion.languages.javascript_queries import JS_QUERY
 from app.core.exceptions import (
     LanguageLoadError,
     TreeSitterParseError,
     UnsupportedFileExtensionError,
 )
+from app.ingestion.languages.go_queries import GO_QUERY
+from app.ingestion.languages.javascript_queries import JS_QUERY
+from app.ingestion.languages.python_queries import PYTHON_QUERY
+from app.ingestion.languages.typescript_queries import TS_QUERY
 
 
-@dataclass
+@dataclass(frozen=True)
 class LanguageConfig:
     name: str
     language: Language
     query: Query
 
 
-@dataclass
+@dataclass(frozen=True)
 class ParsedFile:
     tree: Tree
     query: Query
