@@ -1,36 +1,31 @@
-"""The CodeChunk model: a structured unit extracted from source code."""
 
 from dataclasses import dataclass
-from enum import Enum
-
-
-class ChunkType(str, Enum):
-    FUNCTION = "function"
-    METHOD = "method"
-    CLASS = "class"
-    IMPORT = "import"
-    MODULE_LEVEL = "module_level"
-    FILE_SUMMARY = "file_summary"
-
-
-@dataclass(frozen=True)
+    
+@dataclass
 class CodeChunk:
+    # identity
     chunk_id: str
-    file_path: str
-    language: str
-    chunk_type: ChunkType
     qualified_name: str
-    parameters: tuple[str, ...]
-    parent_class: str | None
-    imports: tuple[str, ...]
-    source_code: str
-    start_line: int
-    end_line: int
+    symbol_name: str
+    parent_symbol: str | None
 
-    def __post_init__(self):
-        if self.start_line > self.end_line:
-            raise ValueError(
-                f"start_line ({self.start_line}) > end_line ({self.end_line}) for {self.qualified_name}"
-            )
-        if not self.chunk_id:
-            raise ValueError("chunk_id must not be empty")
+    # origin
+    file_path: str
+    start_byte: int
+    end_byte: int
+    language: str
+
+    # content
+    content: str
+    docstring: str | None
+
+    # classification
+    node_type: str
+    chunk_kind: str          # "definition" | "leftover" | "merged_group"
+    merged_symbols: list[str] | None
+
+    # sizing
+    size_chars: int
+
+    # filled in later, by the reference-extraction pass, not by chunking
+    refs: list[str] | None = None
