@@ -13,11 +13,7 @@ from app.core.exceptions import (
     TreeSitterParseError,
     UnsupportedFileExtensionError,
 )
-from app.ingestion.languages.go_queries import GO_QUERY
-from app.ingestion.languages.javascript_queries import JS_QUERY
-from app.ingestion.languages.python_queries import PYTHON_QUERY
-from app.ingestion.languages.typescript_queries import TS_QUERY
-
+from app.ingestion.languages import LANG_HELPERS
 
 @dataclass(frozen=True)
 class LanguageConfig:
@@ -39,10 +35,10 @@ def load_languages() -> dict[str, LanguageConfig]:
     """Load all supported tree-sitter grammars and compile their queries."""
     specs = [
         # (extension, name, loader_function, query_string)
-        (".py", "python", tspython.language, PYTHON_QUERY),
-        (".go", "go", tsgo.language, GO_QUERY),
-        (".ts", "typescript", tsts.language_typescript, TS_QUERY),
-        (".js", "javascript", tsjs.language, JS_QUERY),
+        (".py", "python", tspython.language, LANG_HELPERS["python"].QUERY),
+        (".go", "go", tsgo.language, LANG_HELPERS["go"].QUERY),
+        (".ts", "typescript", tsts.language_typescript, LANG_HELPERS["typescript"].QUERY),
+        (".js", "javascript", tsjs.language, LANG_HELPERS["javascript"].QUERY),
     ]
     configs: dict[str, LanguageConfig] = {}
     for ext, name, loader_fn, query_str in specs:
