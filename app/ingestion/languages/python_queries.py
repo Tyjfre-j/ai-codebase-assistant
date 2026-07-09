@@ -1,4 +1,4 @@
-PYTHON_QUERY = """
+QUERY = """
 (function_definition
   name: (identifier) @func.name
   parameters: (parameters) @func.params
@@ -67,17 +67,38 @@ def resolve_definition_node(def_node):
     return def_node
 
 
+def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
+    """Python methods sit inside a class's `block` (body), which sits inside
+    class_definition. `block` is a generic node also used for if/while/try
+    bodies, so the check only counts if the grandparent is specifically a
+    class_definition — otherwise this is just a nested function, not a method.
+    """
+    from app.ingestion.chunk_builder_helpers import node_text
+
+    parent = def_node.parent
+    if parent is not None and parent.type == "block":
+        grandparent = parent.parent
+        if grandparent is not None and grandparent.type == "class_definition":
+            name_node = grandparent.child_by_field_name("name")
+            if name_node is not None:
+                return node_text(name_node, content)
+    return None
+
+
 def get_member_info(node, content: bytes):
     """For class-skeleton building: identify a method node and its stub signature."""
     from app.ingestion.chunk_builder_helpers import node_text
 
     target = None
     decorators: list[str] = []
+
     if node.type == "decorated_definition":
         inner = node.child_by_field_name("definition")
         if inner is not None and inner.type == "function_definition":
             target = inner
-            decorators = [node_text(d, content) for d in node.children if d.type == "decorator"]
+            decorators = [
+                node_text(d, content) for d in node.children if d.type == "decorator"
+            ]
     elif node.type == "function_definition":
         target = node
 
@@ -87,4 +108,5 @@ def get_member_info(node, content: bytes):
     name = node_text(target.child_by_field_name("name"), content)
     params = node_text(target.child_by_field_name("parameters"), content)
     prefix = "async def" if any(c.type == "async" for c in target.children) else "def"
+
     return {"name": name, "params": params, "decorators": decorators, "prefix": prefix}

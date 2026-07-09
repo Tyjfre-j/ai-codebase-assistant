@@ -1,4 +1,4 @@
-GO_QUERY = """
+QUERY = """
 (function_declaration
   name: (identifier) @func.name
   parameters: (parameter_list) @func.params
@@ -17,6 +17,13 @@ GO_QUERY = """
   )
 ) @class.def
 
+(type_declaration
+  (type_spec
+    name: (type_identifier) @interface.name
+    type: (interface_type) @interface.body
+  )
+) @interface.def
+
 (import_declaration
   (import_spec
     name: (package_identifier)? @import.alias
@@ -34,7 +41,8 @@ GO_QUERY = """
 ) @import.stmt
 """
 
-CLASS_NODE_TYPES = {"type_declaration"}  # unused by Go's own resolver, kept for interface consistency
+STRUCT_NODE_TYPES = {"type_declaration"}     # only when type_spec.type == struct_type
+INTERFACE_NODE_TYPES = {"type_declaration"}  # only when type_spec.type == interface_type
 WRAPPER_TYPES = {"function_declaration", "method_declaration"}
 
 
@@ -42,32 +50,37 @@ def resolve_definition_node(def_node):
     return def_node  # no decorator-equivalent wrapper in Go
 
 
-def resolve_parent_class(captures: dict, content: bytes) -> str | None:
-    """Go-specific: pull the receiver's type name out of the parameter_list node
-    captured as func.receiver — e.g. "(u *User)" or "(u User)" -> "User".
-
-    NOT VERIFIED on the playground — the receiver's inner shape (parameter_declaration
-    with a pointer_type wrapping a type_identifier) is my best recollection of Go's
-    grammar, not something we've tested like everything else in this file. Check this
-    on a real Go method before trusting it.
+def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
+    """Go has no nested-class concept; the equivalent is a method's receiver type,
+    e.g. `func (f *Foo) Bar()` or `func (f Foo) Bar()`. Both pointer and value
+    receivers are handled. Verified against a real parse tree — see
+    tests/test_resolve_parent_class.py.
     """
     from app.ingestion.chunk_builder_helpers import node_text
 
-    if "func.receiver" not in captures:
+    if def_node.type != "method_declaration":
         return None
-    receiver_node = captures["func.receiver"][0]
-    for child in receiver_node.named_children:
-        if child.type != "parameter_declaration":
-            continue
-        type_node = child.child_by_field_name("type")
-        if type_node is None:
-            continue
-        if type_node.type == "pointer_type":
-            type_node = type_node.named_children[0] if type_node.named_children else type_node
-        return node_text(type_node, content)
+
+    receiver = def_node.child_by_field_name("receiver")
+    if receiver is None:
+        return None
+
+    param_decl = next((c for c in receiver.children if c.type == "parameter_declaration"), None)
+    if param_decl is None:
+        return None
+
+    for c in param_decl.children:
+        if c.type == "type_identifier":
+            return node_text(c, content)
+        if c.type == "pointer_type":
+            inner = next((gc for gc in c.children if gc.type == "type_identifier"), None)
+            if inner is not None:
+                return node_text(inner, content)
+
     return None
 
-
 def get_member_info(node, content: bytes):
-    """Go struct bodies contain only fields, never methods — always kept verbatim."""
+    """Go struct bodies contain only fields, never methods — always kept verbatim.
+    Interface bodies contain method_elem signatures with no bodies at all; not yet
+    handled here — decide if the skeleton view should list these separately."""
     return None
