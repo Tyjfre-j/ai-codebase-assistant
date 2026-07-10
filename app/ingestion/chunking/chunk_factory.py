@@ -68,7 +68,6 @@ def build_leftover_chunk(nodes: list[Node], file_path: str, parsed: ParsedFile) 
         size_chars=len(text),
     )
 
-
 def build_class_skeleton_chunk(
     class_node: Node,
     file_path: str,
@@ -90,10 +89,20 @@ def build_class_skeleton_chunk(
                     f"Failed extracting member info for {class_name} "
                     f"(node type={child.type}): {e}"
                 ) from e
+
             if member_info is None:
                 continue
-        else:
-            stub_lines.append("    ...")  # language doesn't support member stubs yet
+
+            decorators = "".join(
+                f"@{decorator}\n    " for decorator in member_info["decorators"]
+            )
+            stub_lines.append(
+                f"    {decorators}{member_info['prefix']} "
+                f"{member_info['name']}{member_info['params']}: ..."
+            )
+
+    if len(stub_lines) == 1:
+        stub_lines.append("    ...")
 
     text = "\n".join(stub_lines)
     return CodeChunk(
@@ -103,7 +112,7 @@ def build_class_skeleton_chunk(
         parent_symbol=None,
         file_path=file_path,
         start_byte=class_node.start_byte,
-        end_byte=class_node.start_byte,  # zero-width: synthetic content, not a real span
+        end_byte=class_node.start_byte,
         language=parsed.language,
         content=text,
         docstring=None,
