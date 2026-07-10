@@ -1,8 +1,10 @@
 
 from dataclasses import dataclass
-    
+
+
 @dataclass
 class CodeChunk:
+    """Serializable unit of code produced by the ingestion chunker."""
     # identity
     chunk_id: str
     qualified_name: str
@@ -21,7 +23,7 @@ class CodeChunk:
 
     # classification
     node_type: str
-    chunk_kind: str          # "definition" | "leftover" | "merged_group"
+    chunk_kind: str  # "definition" | "leftover" | "merged_group" | "class_skeleton"
     merged_symbols: list[str] | None
 
     # sizing
