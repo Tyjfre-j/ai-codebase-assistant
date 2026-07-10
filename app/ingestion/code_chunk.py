@@ -19,7 +19,7 @@ class CodeChunk:
     content: str  # Source text or synthetic class skeleton text embedded for retrieval.
     docstring: str | None  # Reserved for future docstring extraction; currently None.
 
-    node_type: str  # Tree-sitter node type, such as "function_definition" , 
+    node_type: str | None  # Tree-sitter node type, such as "function_definition".
     chunk_kind: str  # One of "definition", "leftover", "merged_group", or "class_skeleton".
     merged_symbols: list[str] | None  # Original symbol names when chunk_kind is "merged_group".
 
