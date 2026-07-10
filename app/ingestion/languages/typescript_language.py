@@ -70,23 +70,23 @@ WRAPPER_TYPES = {"function_declaration"}
 
 
 def resolve_definition_node(def_node):
+    """Return TypeScript definitions as-is because no wrapper is normalized here."""
     return def_node
 
 
 def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
-    """Same structure as JavaScript, but TS uses public_field_definition (not
-    field_definition) for a class field with an initializer. Interfaces have no
-    'parent class' concept — method_signature's parent is interface_body, not
-    class_body, so this naturally returns None for interface members. Verified
-    against a real parse tree — see tests/test_resolve_parent_class.py.
-    """
-    from app.ingestion.chunk_builder_helpers import node_text
+    """Return the owning class for TS methods and public-field arrow functions."""
+    from app.ingestion.source_text import node_text
 
-    target = def_node
-    if target.type == "arrow_function" and target.parent is not None and target.parent.type == "public_field_definition":
-        target = target.parent
+    definition_node = def_node
+    if (
+        definition_node.type == "arrow_function"
+        and definition_node.parent is not None
+        and definition_node.parent.type == "public_field_definition"
+    ):
+        definition_node = definition_node.parent
 
-    parent = target.parent
+    parent = definition_node.parent
     if parent is None or parent.type != "class_body":
         return None
 
@@ -99,15 +99,21 @@ def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None
         return None
     return node_text(name_node, content)
 
+
 def get_member_info(node, content: bytes):
-    from app.ingestion.chunk_builder_helpers import node_text
+    """Return a class-method signature for TypeScript class skeleton chunks."""
+    from app.ingestion.source_text import node_text
 
     if node.type != "method_definition":
         return None
     name = node_text(node.child_by_field_name("name"), content)
     params = node_text(node.child_by_field_name("parameters"), content)
-    is_async = any(c.type == "async" for c in node.children)
-    decorators = [node_text(c, content) for c in node.children if c.type == "decorator"]
+    is_async = any(child.type == "async" for child in node.children)
+    decorators = [
+        node_text(child, content)
+        for child in node.children
+        if child.type == "decorator"
+    ]
     return {
         "name": name,
         "params": params,
