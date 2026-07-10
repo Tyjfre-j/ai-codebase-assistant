@@ -68,12 +68,8 @@ def resolve_definition_node(def_node):
 
 
 def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
-    """Python methods sit inside a class's `block` (body), which sits inside
-    class_definition. `block` is a generic node also used for if/while/try
-    bodies, so the check only counts if the grandparent is specifically a
-    class_definition — otherwise this is just a nested function, not a method.
-    """
-    from app.ingestion.chunk_builder_helpers import node_text
+    """Return the owning class name for Python methods."""
+    from app.ingestion.source_text import node_text
 
     parent = def_node.parent
     if parent is not None and parent.type == "block":
@@ -87,26 +83,28 @@ def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None
 
 def get_member_info(node, content: bytes):
     """For class-skeleton building: identify a method node and its stub signature."""
-    from app.ingestion.chunk_builder_helpers import node_text
+    from app.ingestion.source_text import node_text
 
-    target = None
+    function_node = None
     decorators: list[str] = []
 
     if node.type == "decorated_definition":
         inner = node.child_by_field_name("definition")
         if inner is not None and inner.type == "function_definition":
-            target = inner
+            function_node = inner
             decorators = [
-                node_text(d, content) for d in node.children if d.type == "decorator"
+                node_text(child, content)
+                for child in node.children
+                if child.type == "decorator"
             ]
     elif node.type == "function_definition":
-        target = node
+        function_node = node
 
-    if target is None:
+    if function_node is None:
         return None
 
-    name = node_text(target.child_by_field_name("name"), content)
-    params = node_text(target.child_by_field_name("parameters"), content)
-    prefix = "async def" if any(c.type == "async" for c in target.children) else "def"
+    name = node_text(function_node.child_by_field_name("name"), content)
+    params = node_text(function_node.child_by_field_name("parameters"), content)
+    prefix = "async def" if any(child.type == "async" for child in function_node.children) else "def"
 
     return {"name": name, "params": params, "decorators": decorators, "prefix": prefix}
