@@ -26,14 +26,22 @@ def _walk(
         size = node.end_byte - node.start_byte
         if size <= budget:
             return [("def", [node])]
-        return _walk_children(node, definition_ids, budget, class_node_types)
+
+        if _contains_definition(node, definition_ids):
+            # oversized, but has a nested named def (e.g. a nested function) —
+            # recurse to find it instead of losing this node's identity
+            return _walk_children(node, definition_ids, budget, class_node_types)
+
+        # oversized with nothing nested to split around — keep this as a real
+        # definition chunk rather than demoting it to an anonymous leftover.
+        # It'll exceed `budget`, but that's preferable to losing its name,
+        # parent_symbol, and chunk_kind entirely.
+        return [("def", [node])]
 
     if not _contains_definition(node, definition_ids):
         return [("leftover", [node])]
 
     return _walk_children(node, definition_ids, budget, class_node_types)
-
-
 def _walk_children(
     node: Node,
     definition_ids: set[int],

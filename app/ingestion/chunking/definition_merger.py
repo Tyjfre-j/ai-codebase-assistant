@@ -47,4 +47,5 @@ def combine_chunks(first: CodeChunk, second: CodeChunk) -> CodeChunk:
         merged_symbols=merged_symbol_names,
         symbol_name=f"{first.symbol_name}+{second.symbol_name}",
         qualified_name=f"{first.qualified_name}+{second.qualified_name}",
+        node_type=None,
     )
