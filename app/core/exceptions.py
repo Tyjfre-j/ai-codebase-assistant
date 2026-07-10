@@ -36,3 +36,21 @@ class TreeSitterParseError(IngestionError):
 
 class ChunkExtractionError(IngestionError):
     """Raised when converting parsed captures into CodeChunks fails."""
+
+class UnregisteredLanguageError(ChunkExtractionError):
+    """Raised when a ParsedFile's language has no entry in LANG_HELPERS."""
+
+
+class InvalidChunkBudgetError(ChunkExtractionError):
+    """Raised when chunk_file is called with a non-positive budget."""
+
+
+class ChunkDecodeError(ChunkExtractionError):
+    """Raised when a node's byte range can't be decoded as UTF-8 text."""
+
+
+class MalformedSourceError(IngestionError):
+    """Raised when the parse tree contains error nodes (syntax errors) that
+    would produce unreliable chunk boundaries. Sibling to TreeSitterParseError:
+    that one fires when tree-sitter can't produce a tree at all; this one fires
+    when it produces a tree, but that tree contains error nodes."""
