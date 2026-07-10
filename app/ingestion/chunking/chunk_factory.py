@@ -1,5 +1,3 @@
-import uuid
-
 from tree_sitter import Node
 
 from app.core.exceptions import ChunkExtractionError

@@ -123,11 +123,15 @@ class RepositoryCloner:
         try:
             return self._do_clone(repo_url, ref)
         except Exception:
-            shutil.rmtree(self._tmpdir, ignore_errors=True)
+            if self._tmpdir is not None:
+                shutil.rmtree(self._tmpdir, ignore_errors=True)
             raise
 
-
     def _do_clone(self, repo_url: str, ref: str | None) -> ClonedRepo:
+        clone_path = self._tmpdir
+        if clone_path is None:
+            raise RuntimeError("clone path was not initialized")
+
         clone_command = [
             "git",
             "clone",
@@ -138,7 +142,7 @@ class RepositoryCloner:
         ]
         if ref:
             clone_command += ["--branch", ref]
-        clone_command += [repo_url, str(self._tmpdir)]
+        clone_command += [repo_url, str(clone_path)]
 
         try:
             subprocess.run(
@@ -164,7 +168,7 @@ class RepositoryCloner:
                 f"git clone failed: {stderr[:300]}"
             ) from exc
 
-        files = [path for path in self._tmpdir.rglob("*") if path.is_file()]
+        files = [path for path in clone_path.rglob("*") if path.is_file()]
         size_bytes = sum(path.stat().st_size for path in files)
         if size_bytes > self._max_repo_size_mb * 1024 * 1024:
             raise RepositoryTooLargeError(
@@ -173,7 +177,7 @@ class RepositoryCloner:
 
         try:
             result = subprocess.run(
-                ["git", "-C", str(self._tmpdir), "rev-parse", "HEAD"],
+                ["git", "-C", str(clone_path), "rev-parse", "HEAD"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -185,9 +189,8 @@ class RepositoryCloner:
             ) from exc
 
         return ClonedRepo(
-            local_path=self._tmpdir,
+            local_path=clone_path,
             commit_sha=commit_sha,
             repo_url=repo_url,
             size_bytes=size_bytes,
         )
-

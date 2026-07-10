@@ -31,7 +31,7 @@ def chunk_file(
     }
 
     language_helpers = LANG_HELPERS[parsed.language]
-    class_node_types = getattr(language_helpers, "CLASS_NODE_TYPES", set())
+    class_node_types: set[str] = getattr(language_helpers, "CLASS_NODE_TYPES", set())
     chunk_candidates = walk_top_level(
         parsed.tree.root_node,
         definition_ids,
