@@ -38,9 +38,6 @@ def extract_symbol_name(node: Node, content: bytes) -> str:
     return node_text(name_node, content)
 
 def stable_chunk_id(file_path: str, start_byte: int, qualified_name: str) -> str:
-    """Deterministic id: stable across re-runs unless the chunk moves or is renamed.
-    Unlike a random uuid4, re-chunking an unchanged file produces the same ids,
-    which is what lets incremental re-indexing skip unchanged chunks later.
-    """
+    """Deterministic id: stable across re-runs unless the chunk moves or is renamed."""
     raw = f"{file_path}:{start_byte}:{qualified_name}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]

@@ -4,30 +4,25 @@ from dataclasses import dataclass
 
 @dataclass
 class CodeChunk:
-    """Serializable unit of code produced by the ingestion chunker."""
-    # identity
-    chunk_id: str
-    qualified_name: str
-    symbol_name: str
-    parent_symbol: str | None
+    """Serializable retrievable piece of a source file."""
 
-    # origin
-    file_path: str
-    start_byte: int
-    end_byte: int
-    language: str
+    chunk_id: str  # Stable id used to reference this chunk across indexing runs.
+    qualified_name: str  # Full symbol path, or a synthetic path for leftover chunks.
+    symbol_name: str  # Bare identifier, "<anonymous>" when unnamed, or "<leftover>".
+    parent_symbol: str | None  # Enclosing class/struct name when one is resolved.
 
-    # content
-    content: str
-    docstring: str | None
+    file_path: str  # Source file this chunk was extracted from.
+    start_byte: int  # Start byte in the original source
+    end_byte: int  # End byte in the original source; zero-width for skeletons.
+    language: str  # Parsed language name, such as "python", "go", "javascript", or "typescript".
 
-    # classification
-    node_type: str
-    chunk_kind: str  # "definition" | "leftover" | "merged_group" | "class_skeleton"
-    merged_symbols: list[str] | None
+    content: str  # Source text or synthetic class skeleton text embedded for retrieval.
+    docstring: str | None  # Reserved for future docstring extraction; currently None.
 
-    # sizing
-    size_chars: int
+    node_type: str  # Tree-sitter node type, such as "function_definition" , 
+    chunk_kind: str  # One of "definition", "leftover", "merged_group", or "class_skeleton".
+    merged_symbols: list[str] | None  # Original symbol names when chunk_kind is "merged_group".
 
-    # filled in later, by the reference-extraction pass, not by chunking
-    refs: list[str] | None = None
+    size_chars: int  # Character length of content, used by chunk splitting and merging.
+
+    refs: list[str] | None = None  # Filled later by reference extraction, not chunking.
