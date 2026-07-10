@@ -15,8 +15,10 @@ from app.core.exceptions import (
 )
 from app.ingestion.languages import LANG_HELPERS
 
+
 @dataclass(frozen=True)
 class LanguageConfig:
+    """Tree-sitter parser/query bundle for one file extension."""
     name: str
     language: Language
     parser: Parser
@@ -25,6 +27,7 @@ class LanguageConfig:
 
 @dataclass(frozen=True)
 class ParsedFile:
+    """Tree-sitter parse result plus the source bytes used to build it."""
     tree: Tree
     query: Query
     language: str
@@ -53,10 +56,13 @@ def load_languages() -> dict[str, LanguageConfig]:
 
 
 class CodeParser:
-    def __init__(self):
+    """Parse supported source files with their language-specific queries."""
+
+    def __init__(self) -> None:
         self.language_configs = load_languages()
 
     def get_language_config(self, file_extension: str) -> LanguageConfig | None:
+        """Return the parser config for an extension, if supported."""
         return self.language_configs.get(file_extension)
 
     def validate_file(self, file_path: str) -> None:
