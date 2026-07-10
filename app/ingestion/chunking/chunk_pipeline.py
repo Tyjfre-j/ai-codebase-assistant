@@ -52,7 +52,7 @@ def chunk_file(
         else:
             leftover_groups.append(nodes)
 
-    definition_chunks = merge_adjacent_defs(definition_chunks, budget)
+    # definition_chunks = merge_adjacent_defs(definition_chunks, budget)
     leftover_chunks, import_text, import_ranges = group_leftovers(
         leftover_groups, captures, file_path, parsed, budget
     )
