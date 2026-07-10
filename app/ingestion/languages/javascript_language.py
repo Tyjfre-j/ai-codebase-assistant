@@ -61,27 +61,27 @@ QUERY = """
 """
 
 CLASS_NODE_TYPES = {"class_declaration"}
-WRAPPER_TYPES = {"function_declaration"}  # arrow functions/methods aren't re-parseable standalone wrappers the same way
+WRAPPER_TYPES = {"function_declaration"}
 
 
 def resolve_definition_node(def_node):
     """JS has no decorator-wrapper node equivalent to Python's — nothing to unwrap."""
     return def_node
 
+
 def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
-    """Handles both method_definition (class methods) and arrow functions assigned
-    as class fields. Distinguishes real class methods from object-literal methods
-    by requiring the grandparent to be class_declaration/class_expression, not
-    object. Verified against a real parse tree — see
-    tests/test_resolve_parent_class.py.
-    """
-    from app.ingestion.chunk_builder_helpers import node_text
+    """Return the owning class for JS methods and class-field arrow functions."""
+    from app.ingestion.source_text import node_text
 
-    target = def_node
-    if target.type == "arrow_function" and target.parent is not None and target.parent.type == "field_definition":
-        target = target.parent
+    definition_node = def_node
+    if (
+        definition_node.type == "arrow_function"
+        and definition_node.parent is not None
+        and definition_node.parent.type == "field_definition"
+    ):
+        definition_node = definition_node.parent
 
-    parent = target.parent
+    parent = definition_node.parent
     if parent is None or parent.type != "class_body":
         return None
 
@@ -96,16 +96,19 @@ def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None
 
 
 def get_member_info(node, content: bytes):
-    """Best-effort: JS decorators are a newer/unstable grammar feature — verify on the
-    playground for your actual grammar version before trusting the decorator extraction here."""
-    from app.ingestion.chunk_builder_helpers import node_text
+    """Return a class-method signature for JS class skeleton chunks."""
+    from app.ingestion.source_text import node_text
 
     if node.type != "method_definition":
         return None
     name = node_text(node.child_by_field_name("name"), content)
     params = node_text(node.child_by_field_name("parameters"), content)
-    is_async = any(c.type == "async" for c in node.children)
-    decorators = [node_text(c, content) for c in node.children if c.type == "decorator"]
+    is_async = any(child.type == "async" for child in node.children)
+    decorators = [
+        node_text(child, content)
+        for child in node.children
+        if child.type == "decorator"
+    ]
     return {
         "name": name,
         "params": params,
