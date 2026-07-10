@@ -2,14 +2,16 @@ import uuid
 
 from tree_sitter import Node
 
-from app.ingestion.chunk_builder_helpers import (
+from app.core.exceptions import ChunkExtractionError
+from app.ingestion.code_chunk import CodeChunk
+from app.ingestion.languages import LANG_HELPERS
+from app.ingestion.source_parser import ParsedFile
+from app.ingestion.source_text import (
     extract_symbol_name,
     node_text,
     node_text_range,
+    stable_chunk_id,
 )
-from app.ingestion.chunk_model import CodeChunk
-from app.ingestion.languages import LANG_HELPERS
-from app.ingestion.parser import ParsedFile
 
 
 def build_chunk(
@@ -19,14 +21,15 @@ def build_chunk(
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
 ) -> CodeChunk:
-    helpers = LANG_HELPERS[parsed.language]
-    parent_symbol = helpers.resolve_parent_class(node, captures, parsed.content)
+    """Build a CodeChunk for a captured definition node."""
+    language_helpers = LANG_HELPERS[parsed.language]
+    parent_symbol = language_helpers.resolve_parent_class(node, captures, parsed.content)
     symbol_name = extract_symbol_name(node, parsed.content)
     qualified_name = f"{parent_symbol}.{symbol_name}" if parent_symbol else symbol_name
     text = node_text(node, parsed.content)
 
     return CodeChunk(
-        chunk_id=uuid.uuid4().hex,
+        chunk_id=stable_chunk_id(file_path, node.start_byte, qualified_name),
         qualified_name=qualified_name,
         symbol_name=symbol_name,
         parent_symbol=parent_symbol,
@@ -44,11 +47,12 @@ def build_chunk(
 
 
 def build_leftover_chunk(nodes: list[Node], file_path: str, parsed: ParsedFile) -> CodeChunk:
+    """Build a CodeChunk for adjacent non-definition source nodes."""
     start, end = nodes[0].start_byte, nodes[-1].end_byte
     text = node_text_range(start, end, parsed.content)
 
     return CodeChunk(
-        chunk_id=uuid.uuid4().hex,
+        chunk_id=stable_chunk_id(file_path, start, f"<leftover:{start}>"),
         qualified_name=f"{file_path}:leftover:{start}",
         symbol_name="<leftover>",
         parent_symbol=None,
@@ -64,7 +68,13 @@ def build_leftover_chunk(nodes: list[Node], file_path: str, parsed: ParsedFile) 
         size_chars=len(text),
     )
 
-def build_class_skeleton_chunk(class_node, file_path: str, parsed: ParsedFile) -> CodeChunk:
+
+def build_class_skeleton_chunk(
+    class_node: Node,
+    file_path: str,
+    parsed: ParsedFile,
+) -> CodeChunk:
+    """Build a compact class chunk that lists member signatures."""
     class_name = extract_symbol_name(class_node, parsed.content)
     stub_lines = [f"class {class_name}:"]
 
@@ -73,17 +83,21 @@ def build_class_skeleton_chunk(class_node, file_path: str, parsed: ParsedFile) -
 
     if body is not None and get_member_info is not None:
         for child in body.children:
-            info = get_member_info(child, parsed.content)
-            if info is None:
+            try:
+                member_info = get_member_info(child, parsed.content)
+            except Exception as e:
+                raise ChunkExtractionError(
+                    f"Failed extracting member info for {class_name} "
+                    f"(node type={child.type}): {e}"
+                ) from e
+            if member_info is None:
                 continue
-            decos = "".join(f"@{d}\n    " for d in info["decorators"])
-            stub_lines.append(f"    {decos}{info['prefix']} {info['name']}{info['params']}: ...")
-    else:
-        stub_lines.append("    ...")  # language doesn't support member stubs yet
+        else:
+            stub_lines.append("    ...")  # language doesn't support member stubs yet
 
     text = "\n".join(stub_lines)
     return CodeChunk(
-        chunk_id=uuid.uuid4().hex,
+        chunk_id=stable_chunk_id(file_path, class_node.start_byte, class_name),
         qualified_name=class_name,
         symbol_name=class_name,
         parent_symbol=None,
