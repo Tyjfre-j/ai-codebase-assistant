@@ -6,7 +6,7 @@ import socket
 from unittest.mock import MagicMock, patch
 from app.core.constants import ALLOWED_REPOSITORY_HOSTS
 from app.core.exceptions import CloneTimeoutError, EmptyRepositoryError, InvalidRefError, InvalidRepositoryURLError, RepositoryTooLargeError
-from app.ingestion.cloner import RepositoryCloner, _extract_host_from_url, _validate_ref, _validate_repo_url
+from app.ingestion.repository_cloner import RepositoryCloner, _extract_host_from_url, _validate_ref, _validate_repo_url
 
 
 def test_scheme_rejection():
@@ -37,31 +37,31 @@ def test_extracts_host_from_git_at():
     assert result == "github.com"
 
 def test_passes_when_ip_is_public():
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
         _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
 def test_rejects_when_ip_is_private():
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="192.168.1.1"):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="192.168.1.1"):
         with pytest.raises(InvalidRepositoryURLError, match="192.168.1.1"):
             _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
 def test_rejects_when_ip_is_loopback():
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="127.0.0.1"):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="127.0.0.1"):
         with pytest.raises(InvalidRepositoryURLError, match="127.0.0.1"):
             _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
 def test_rejects_when_ip_is_link_local():
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="169.254.1.1"):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="169.254.1.1"):
         with pytest.raises(InvalidRepositoryURLError, match="169.254.1.1"):
             _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
 def test_rejects_when_ip_is_reserved():
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="240.0.0.1"):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="240.0.0.1"):
         with pytest.raises(InvalidRepositoryURLError, match="240.0.0.1"):
             _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
 def test_rejects_when_host_cannot_be_resolved():
-    with patch("app.ingestion.cloner.socket.gethostbyname", side_effect=socket.gaierror("Name or service not known")):
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", side_effect=socket.gaierror("Name or service not known")):
         with pytest.raises(InvalidRepositoryURLError, match="Failed to resolve host"):
             _validate_repo_url("https://github.com/owner/repo", ALLOWED_REPOSITORY_HOSTS)
 
@@ -79,9 +79,9 @@ def test_ref_accepts_valid_ref():
     _validate_ref("feature/new-feature")
 
 def test_repository_cloner_workflow(tmp_path):
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
-        with patch("app.ingestion.cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
-            with patch("app.ingestion.cloner.subprocess.run") as mock_run:
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
+        with patch("app.ingestion.repository_cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
+            with patch("app.ingestion.repository_cloner.subprocess.run") as mock_run:
                 mock_run.side_effect = [
                     MagicMock(returncode=0),                          # first call — git clone
                     MagicMock(returncode=0, stdout="a" * 40 + "\n"),  # second call — rev-parse
@@ -96,9 +96,9 @@ def test_repository_cloner_workflow(tmp_path):
                 assert mock_run.call_count == 2
 
 def test_repository_cloner_clone_timeout(tmp_path):
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
-        with patch("app.ingestion.cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
-            with patch("app.ingestion.cloner.subprocess.run") as mock_run:
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
+        with patch("app.ingestion.repository_cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
+            with patch("app.ingestion.repository_cloner.subprocess.run") as mock_run:
                 mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=5)
                 with RepositoryCloner() as cloner:
                     with pytest.raises(CloneTimeoutError):
@@ -107,9 +107,9 @@ def test_repository_cloner_clone_timeout(tmp_path):
                     assert not tmp_path.exists()
 
 def test_repository_cloner_size_limit_exceeded(tmp_path):
-    with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
-                with patch("app.ingestion.cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
-                    with patch("app.ingestion.cloner.subprocess.run") as mock_run:
+    with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
+                with patch("app.ingestion.repository_cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
+                    with patch("app.ingestion.repository_cloner.subprocess.run") as mock_run:
                         mock_run.side_effect = [
                             MagicMock(returncode=0),                          # first call — git clone
                         ]
@@ -119,9 +119,9 @@ def test_repository_cloner_size_limit_exceeded(tmp_path):
                                 cloner.clone("https://github.com/owner/repo")
 
 def test_repository_cloner_empty_repo(tmp_path):
-     with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
-                with patch("app.ingestion.cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
-                    with patch("app.ingestion.cloner.subprocess.run") as mock_run:
+     with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
+                with patch("app.ingestion.repository_cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
+                    with patch("app.ingestion.repository_cloner.subprocess.run") as mock_run:
                         mock_run.side_effect = [
                             MagicMock(returncode=0),                          # first call — git clone
                             subprocess.CalledProcessError(returncode=128, cmd="git rev-parse HEAD", stderr=b"fatal: your repository is empty\n"),  # second call — rev-parse
@@ -131,9 +131,9 @@ def test_repository_cloner_empty_repo(tmp_path):
                                 cloner.clone("https://github.com/owner/repo")
     
 def test_repository_cloner_clone_cleans_up_on_error(tmp_path):
-     with patch("app.ingestion.cloner.socket.gethostbyname", return_value="140.82.114.4"):
-                with patch("app.ingestion.cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
-                    with patch("app.ingestion.cloner.subprocess.run") as mock_run:
+     with patch("app.ingestion.repository_cloner.socket.gethostbyname", return_value="140.82.114.4"):
+                with patch("app.ingestion.repository_cloner.tempfile.mkdtemp", return_value=str(tmp_path)):
+                    with patch("app.ingestion.repository_cloner.subprocess.run") as mock_run:
                         mock_run.side_effect = [
                              MagicMock(returncode=0),
                              MagicMock(returncode=0, stdout="a" * 40 + "\n")
