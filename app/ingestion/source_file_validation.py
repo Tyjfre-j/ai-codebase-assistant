@@ -42,6 +42,7 @@ def is_file_binary(content: bytes) -> bool:
     nontext = sample.translate(None, _TEXT_CHARACTERS)
     return bool(nontext)
 
+
 def is_file_minified(file_path: str, content: bytes) -> bool:
     """Check if content looks minified: dense, few-lined, consistently long lines."""
     if Path(file_path).stem.endswith(".min"):
@@ -68,14 +69,16 @@ def is_file_minified(file_path: str, content: bytes) -> bool:
         return long_line_count == len(lines)  # every line is long -> minified
 
     long_line_ratio = long_line_count / len(lines)
-    avg_line_length = sum(len(line) for line in lines) / len(lines)
+    average_line_length = sum(len(line) for line in lines) / len(lines)
     return (
         long_line_ratio >= _LONG_LINE_RATIO
-        and avg_line_length > _MIN_AVG_LINE_LENGTH
+        and average_line_length > _MIN_AVG_LINE_LENGTH
     )
+
 
 @dataclass
 class ValidationResult:
+    """Result of a path or content validation check."""
     is_valid: bool
     reason: str | None
 
