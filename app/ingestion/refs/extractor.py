@@ -1,7 +1,11 @@
+from torch import chunk
 from tree_sitter import Node, Query, QueryCursor
 
-from app.ingestion.code_chunk import RefRecord
+from app.ingestion.code_chunk import CodeChunk, RefRecord
+from app.ingestion.source_parser import ParsedFile
 from app.ingestion.source_text import node_text
+
+_SKIPPED_CHUNK_KINDS = {"class_skeleton", "leftover", "merged_group"}
 
 def find_node_for_range(root: Node, start_byte: int, end_byte: int) -> Node:
     """Find the smallest AST node in `root`'s tree that fully contains [start_byte, end_byte)."""
@@ -56,3 +60,13 @@ def extract_raw_refs(node: Node, content: bytes, ref_query: Query) -> list[RefRe
         ))
 
     return refs
+
+def extract_refs_for_file(parsed: ParsedFile, chunks: list[CodeChunk]) -> list[CodeChunk]:
+    """Populate `refs` on every definition-kind chunk from this file, mutating in place."""
+    for chunk in chunks:
+        if chunk.chunk_kind in _SKIPPED_CHUNK_KINDS:
+            continue
+        node = find_node_for_range(parsed.tree.root_node, chunk.start_byte, chunk.end_byte)
+        chunk.refs = extract_raw_refs(node, parsed.content, parsed.ref_query)
+
+    return chunks
