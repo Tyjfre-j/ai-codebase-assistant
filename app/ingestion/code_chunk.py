@@ -1,6 +1,12 @@
 
-from dataclasses import dataclass
+from dataclasses import dataclass , field
 
+@dataclass
+class RefRecord:
+
+    raw_name: str  # Raw symbol name as it appears in the source code.
+    target_chunk_id: str  # Stable chunk id of the referenced symbol, if resolved.
+    edge_type: str  # One of "local", "external", or "unresolved".
 
 @dataclass
 class CodeChunk:
@@ -25,4 +31,12 @@ class CodeChunk:
 
     size_chars: int  # Character length of content, used by chunk splitting and merging.
 
-    refs: list[str] | None = None  # Filled later by reference extraction, not chunking.
+    refs: list[RefRecord] = field(default_factory=list)  # Filled later by reference extraction, not chunking.
+
+@dataclass
+class ParsedFileChunks:
+    """Result of chunking one file, with import metadata preserved for resolution."""
+    file_path: str
+    chunks: list[CodeChunk]
+    import_text: str
+    import_ranges: list[tuple[int, int]]
