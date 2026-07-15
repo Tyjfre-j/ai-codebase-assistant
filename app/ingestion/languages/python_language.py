@@ -55,6 +55,24 @@ QUERY = """
   (wildcard_import) @import.wildcard
 ) @import.stmt
 """
+REF_QUERY = """
+(call
+  function: (identifier) @reference.call
+)
+
+(call
+  function: (attribute
+    object: (_) @reference.call.object
+    attribute: (identifier) @reference.call.attr
+  )
+)
+
+(class_definition
+  superclasses: (argument_list
+    (identifier) @reference.base_class
+  )
+)
+"""
 
 CLASS_NODE_TYPES = {"class_definition"}
 WRAPPER_TYPES = {"function_definition", "class_definition"}

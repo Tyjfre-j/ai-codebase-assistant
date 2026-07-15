@@ -63,6 +63,7 @@ QUERY = """
    )
  ) @func.def
 """
+REF_QUERY = ""
 
 CLASS_NODE_TYPES = {"class_declaration"}
 INTERFACE_NODE_TYPES = {"interface_declaration"}
