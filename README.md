@@ -17,7 +17,7 @@ Tree-sitter, and producing structured `CodeChunk` objects.
 
 Language support lives in `app/ingestion/languages/`. Each language module
 provides a Tree-sitter query plus small helper functions for resolving parent
-symbols and class/member information.
+symbols and class/member stub information.
 
 ## Project Layout
 
@@ -53,10 +53,13 @@ The intended flow is:
 3. Validate each file by path and content.
 4. Parse the file with `CodeParser`.
 5. Chunk the parsed file with `chunk_file`.
-6. Later pipeline stages can embed, store, and retrieve the resulting chunks.
+6. Extract import bindings and raw references for each chunk.
+7. Resolve references against same-file, import, and global targets.
+8. Later pipeline stages can embed, store, and retrieve the resulting chunks.
 
-The repo does not yet have one top-level orchestrator that wires every step
-together into a single command.
+The repo has a temporary CLI entry point in `app/main.py`, but it does not yet
+have a production orchestrator that wires every step together into a supported
+command or service.
 
 ## Chunking Overview
 
@@ -79,18 +82,19 @@ into the class body so methods can still become their own chunks.
 Class skeleton chunks are synthetic and zero-width:
 
 - `start_byte == end_byte`
-- `chunk_kind == "class_skeleton"`
-- `content` contains compact method stubs when member extraction is available,
+- `kind == "class_skeleton"`
+- `code` contains compact method stubs when member extraction is available,
   or `...` when no member stubs are found.
+- `references` may contain inheritance records captured from the real class node.
 
 Definition chunks use stable ids:
 
 ```text
-stable_chunk_id(file_path, start_byte, qualified_name)
+stable_chunk_id(file_path, start_byte, full_name)
 ```
 
 That keeps a chunk identifiable across reruns unless it moves or is renamed.
-Body content changes can be detected separately by hashing `content` in a future
+Body content changes can be detected separately by hashing `code` in a future
 incremental indexing step.
 
 ## CodeChunk Fields
@@ -98,23 +102,26 @@ incremental indexing step.
 `CodeChunk` is the main data model emitted by chunking. Important fields:
 
 - `chunk_id`: stable identifier for indexing and lookup.
-- `qualified_name`: full symbol path, or synthetic leftover name.
-- `symbol_name`: bare symbol name.
-- `parent_symbol`: enclosing class or struct when resolved.
+- `full_name`: full symbol path, or synthetic leftover name.
+- `name`: bare symbol name.
+- `defined_in_class`: enclosing class or struct when resolved.
 - `file_path`: source file path.
 - `start_byte` / `end_byte`: source byte range.
 - `language`: parsed language name.
-- `content`: source text or synthetic skeleton text.
+- `code`: source text or synthetic skeleton text.
 - `node_type`: Tree-sitter node type.
-- `chunk_kind`: `definition`, `leftover`, `merged_group`, or `class_skeleton`.
-- `merged_symbols`: original symbols included in a merged chunk.
-- `refs`: reserved for later reference extraction.
+- `kind`: `definition`, `leftover`, `merged_group`, or `class_skeleton`.
+- `merged_names`: original names included in a merged chunk.
+- `references`: raw reference records extracted from definition and class
+  skeleton chunks; each record starts unresolved and may be linked to a target
+  chunk later.
 
 ## Correctness Checks
 
 The ingestion tests include two useful invariants:
 
-- Parent symbol resolution works across Python, Go, JavaScript, and TypeScript.
+- Owning-class resolution works across Python, Go, JavaScript, and TypeScript.
+- Class skeleton chunks preserve inheritance references.
 - Chunk ranges plus import ranges account for every non-whitespace byte in the
   original file exactly once. Class skeletons are excluded from this range check
   because they are synthetic zero-width chunks.
@@ -141,9 +148,10 @@ uv run ruff check app/ingestion
 
 ## Current Gaps
 
-- No top-level ingest command/API yet wires clone, scan, validate, parse, chunk,
+- No production ingest service yet wires clone, scan, validate, parse, chunk,
   embed, and store into one flow.
-- `CodeChunk.refs` is not populated yet.
+- Reference extraction currently has a Python implementation; Go, JavaScript,
+  and TypeScript still use empty `REF_QUERY` strings.
 - Embedding generation and vector storage are not wired to chunking yet.
 - Chunk output is returned as definitions first and leftovers second, not sorted
   globally by source order.
@@ -152,7 +160,7 @@ uv run ruff check app/ingestion
 ## Next Steps
 
 1. Add an orchestration layer for full repository ingestion.
-2. Extract symbol references and populate `CodeChunk.refs`.
+2. Fill out reference extraction queries for all supported languages.
 3. Generate embeddings for chunk content.
 4. Store chunks and embeddings in Qdrant.
 5. Add incremental re-indexing based on stable ids and content hashes.
