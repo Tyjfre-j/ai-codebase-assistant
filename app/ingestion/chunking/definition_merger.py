@@ -11,7 +11,7 @@ def merge_adjacent_defs(chunks: list[CodeChunk], budget: int) -> list[CodeChunk]
     buffer: CodeChunk | None = None
 
     for chunk in chunks:
-        if chunk.chunk_kind == "class_skeleton":
+        if chunk.kind == "class_skeleton":
             if buffer is not None:
                 merged.append(buffer)
                 buffer = None
@@ -33,19 +33,19 @@ def merge_adjacent_defs(chunks: list[CodeChunk], budget: int) -> list[CodeChunk]
 
 def combine_chunks(first: CodeChunk, second: CodeChunk) -> CodeChunk:
     """Return a single chunk with metadata from two adjacent definitions."""
-    merged_symbol_names = (
-        first.merged_symbols or [first.symbol_name]
+    merged_names = (
+        first.merged_names or [first.name]
     ) + (
-        second.merged_symbols or [second.symbol_name]
+        second.merged_names or [second.name]
     )
     return replace(
         first,
         end_byte=second.end_byte,
-        content=first.content + "\n" + second.content,
+        code=first.code + "\n" + second.code,
         size_chars=first.size_chars + second.size_chars + 1,
-        chunk_kind="merged_group",
-        merged_symbols=merged_symbol_names,
-        symbol_name=f"{first.symbol_name}+{second.symbol_name}",
-        qualified_name=f"{first.qualified_name}+{second.qualified_name}",
+        kind="merged_group",
+        merged_names=merged_names,
+        name=f"{first.name}+{second.name}",
+        full_name=f"{first.full_name}+{second.full_name}",
         node_type=None,
     )

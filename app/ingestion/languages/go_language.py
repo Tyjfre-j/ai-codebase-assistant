@@ -48,12 +48,12 @@ INTERFACE_NODE_TYPES = {"type_declaration"}  # only when type_spec.type == inter
 WRAPPER_TYPES = {"function_declaration", "method_declaration"}
 
 
-def resolve_definition_node(def_node):
+def unwrap_decorated_definition_node(def_node):
     """Return Go definitions as-is because Go has no decorator wrapper."""
     return def_node  # no decorator-equivalent wrapper in Go
 
 
-def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
+def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
     """Return the receiver type name for Go methods."""
     from app.ingestion.source_text import node_text
 
@@ -85,6 +85,6 @@ def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None
     return None
 
 
-def get_member_info(node, content: bytes):
+def get_class_member_stub_info(node, content: bytes):
     """Return no class member stubs because Go methods are not tree-nested."""
     return None

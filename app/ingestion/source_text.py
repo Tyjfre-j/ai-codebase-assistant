@@ -21,7 +21,8 @@ def node_text_range(start: int, end: int, content: bytes) -> str:
     except UnicodeDecodeError as e:
         raise ChunkDecodeError(f"Failed to decode bytes {start}-{end}: {e}") from e
 
-def extract_symbol_name(node: Node, content: bytes) -> str:
+
+def extract_definition_name(node: Node, content: bytes) -> str:
     """Pull the identifier name out of a (possibly decorator-wrapped) definition node."""
     target = node
     if node.type == "decorated_definition":
@@ -37,7 +38,8 @@ def extract_symbol_name(node: Node, content: bytes) -> str:
         return "<anonymous>"
     return node_text(name_node, content)
 
-def stable_chunk_id(file_path: str, start_byte: int, qualified_name: str) -> str:
+
+def stable_chunk_id(file_path: str, start_byte: int, full_name: str) -> str:
     """Deterministic id: stable across re-runs unless the chunk moves or is renamed."""
-    raw = f"{file_path}:{start_byte}:{qualified_name}"
+    raw = f"{file_path}:{start_byte}:{full_name}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]

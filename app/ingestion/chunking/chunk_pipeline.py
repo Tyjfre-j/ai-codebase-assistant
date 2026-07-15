@@ -2,7 +2,7 @@ from tree_sitter import Node
 
 from app.core.exceptions import InvalidChunkBudgetError, MalformedSourceError
 from app.ingestion.chunking.chunk_candidates import walk_top_level
-from app.ingestion.chunking.chunk_factory import build_chunk, build_class_skeleton_chunk
+from app.ingestion.chunking.chunk_factory import build_definition_chunk, build_class_skeleton_chunk
 from app.ingestion.chunking.definition_merger import merge_adjacent_defs
 from app.ingestion.chunking.leftover_chunks import group_leftovers
 from app.ingestion.chunking.query_captures import run_captures
@@ -45,7 +45,7 @@ def chunk_file(
         if candidate_kind == "def":
             for node in nodes:
                 definition_chunks.append(
-                    build_chunk(node, "definition", file_path, parsed, captures)
+                    build_definition_chunk(node, "definition", file_path, parsed, captures)
                 )
         elif candidate_kind == "class_skeleton":
             definition_chunks.append(build_class_skeleton_chunk(nodes[0], file_path, parsed))

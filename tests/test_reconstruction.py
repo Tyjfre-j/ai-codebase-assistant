@@ -26,7 +26,7 @@ def test_reconstruction_invariant(fixture_path):
     parsed = parser.parse_file(path, content)
     chunks, import_text, import_ranges = chunk_file(path, parsed)
     all_ranges = [
-        (c.start_byte, c.end_byte) for c in chunks if c.chunk_kind != "class_skeleton"
+        (c.start_byte, c.end_byte) for c in chunks if c.kind != "class_skeleton"
     ] + import_ranges
     all_ranges.sort()
     cursor = 0
