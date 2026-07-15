@@ -60,6 +60,8 @@ QUERY = """
  ) @func.def
 """
 
+REF_QUERY = "" 
+
 CLASS_NODE_TYPES = {"class_declaration"}
 WRAPPER_TYPES = {"function_declaration"}
 

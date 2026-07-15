@@ -40,6 +40,8 @@ QUERY = """
   )
 ) @import.stmt
 """
+REF_QUERY = ""
+
 CLASS_NODE_TYPES: set[str] = set()
 STRUCT_NODE_TYPES = {"type_declaration"}     # only when type_spec.type == struct_type
 INTERFACE_NODE_TYPES = {"type_declaration"}  # only when type_spec.type == interface_type
