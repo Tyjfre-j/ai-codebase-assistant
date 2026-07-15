@@ -1,27 +1,25 @@
 import pytest
 
-from app.ingestion.source_text import extract_symbol_name
 from app.ingestion.chunking.query_captures import run_captures
 from app.ingestion.languages import DEF_CAPTURES, LANG_HELPERS
 from app.ingestion.source_parser import CodeParser
-
+from app.ingestion.source_text import extract_definition_name
 parser = CodeParser()
 
 
 def _find_def_by_name(parsed, captures, name):
     for cap in DEF_CAPTURES:
         for node in captures.get(cap, []):
-            if extract_symbol_name(node, parsed.content) == name:
+            if extract_definition_name(node, parsed.content) == name:
                 return node
     raise AssertionError(f"no definition named {name!r} found in captures")
-
 
 def _resolve(fake_path, source, def_name):
     parsed = parser.parse_file(fake_path, source.encode("utf-8"))
     captures = run_captures(parsed)
     node = _find_def_by_name(parsed, captures, def_name)
     helpers = LANG_HELPERS[parsed.language]
-    return helpers.resolve_parent_class(node, captures, parsed.content)
+    return helpers.get_enclosing_class_name(node, captures, parsed.content)
 
 
 PYTHON_CASES = [

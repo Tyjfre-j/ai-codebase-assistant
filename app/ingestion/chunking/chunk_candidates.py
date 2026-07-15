@@ -42,6 +42,8 @@ def _walk(
         return [("leftover", [node])]
 
     return _walk_children(node, definition_ids, budget, class_node_types)
+
+
 def _walk_children(
     node: Node,
     definition_ids: set[int],

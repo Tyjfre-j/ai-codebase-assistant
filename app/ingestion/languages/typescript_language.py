@@ -70,12 +70,12 @@ INTERFACE_NODE_TYPES = {"interface_declaration"}
 WRAPPER_TYPES = {"function_declaration"}
 
 
-def resolve_definition_node(def_node):
+def unwrap_decorated_definition_node(def_node):
     """Return TypeScript definitions as-is because no wrapper is normalized here."""
     return def_node
 
 
-def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None:
+def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
     """Return the owning class for TS methods and public-field arrow functions."""
     from app.ingestion.source_text import node_text
 
@@ -101,7 +101,7 @@ def resolve_parent_class(def_node, captures: dict, content: bytes) -> str | None
     return node_text(name_node, content)
 
 
-def get_member_info(node, content: bytes):
+def get_class_member_stub_info(node, content: bytes):
     """Return a class-method signature for TypeScript class skeleton chunks."""
     from app.ingestion.source_text import node_text
 

@@ -3,7 +3,9 @@ import logging
 from app.core.exceptions import MalformedSourceError, TreeSitterParseError
 from app.ingestion.chunking.chunk_pipeline import chunk_file
 from app.ingestion.code_chunk import ParsedFileChunks
-from app.ingestion.refs.extractor import extract_refs_for_file
+from app.ingestion.refs.extractor import populate_chunk_references_for_file
+from app.ingestion.refs.import_bindings import extract_import_bindings_for_file
+from app.ingestion.refs.resolver import resolve_all_chunk_references
 from app.ingestion.source_file_scanner import iter_source_files
 from app.ingestion.source_file_validation import (
     validate_file_thru_content,
@@ -15,8 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> list[ParsedFileChunks]:
-    """Walk a repository, parse and chunk every supported source file, and collect
-    per-file results with import metadata preserved for later reference resolution."""
+    """Walk a repository, parse and chunk every supported source file, and collect per-file results."""
     parser = CodeParser()
     extensions = set(parser.language_configs.keys())
     results: list[ParsedFileChunks] = []
@@ -36,7 +37,8 @@ def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> lis
         try:
             parsed = parser.parse_file(file_path, content)
             chunks, import_text, import_ranges = chunk_file(file_path, parsed, budget)
-            extract_refs_for_file(parsed, chunks)
+            populate_chunk_references_for_file(parsed, chunks)
+            import_bindings = extract_import_bindings_for_file(parsed, file_path, root)
         except (MalformedSourceError, TreeSitterParseError) as e:
             logger.warning("Skipping %s: %s", file_path, e)
             continue
@@ -46,6 +48,9 @@ def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> lis
             chunks=chunks,
             import_text=import_text,
             import_ranges=import_ranges,
+            import_bindings=import_bindings,
         ))
+
+    resolve_all_chunk_references(results)
 
     return results

@@ -31,7 +31,7 @@ def run_captures(parsed: ParsedFile) -> dict[str, list[Node]]:
         if definition_capture not in captures_by_name:
             continue
         resolved_nodes = [
-            language_helpers.resolve_definition_node(node)
+            language_helpers.unwrap_decorated_definition_node(node)
             for node in captures_by_name[definition_capture]
         ]
         seen: set[int] = set()

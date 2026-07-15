@@ -1,6 +1,6 @@
 from tree_sitter import Node
 
-from app.ingestion.chunking.chunk_factory import build_leftover_chunk
+from app.ingestion.chunking.chunk_factory import build_leftover_code_chunk
 from app.ingestion.code_chunk import CodeChunk
 from app.ingestion.languages import IMPORT_CAPTURE
 from app.ingestion.source_parser import ParsedFile
@@ -30,12 +30,12 @@ def group_leftovers(
         for node in group_other:
             node_size = node.end_byte - node.start_byte
             if chunk_buffer and buffer_size + node_size > budget:
-                leftover_chunks.append(build_leftover_chunk(chunk_buffer, file_path, parsed))
+                leftover_chunks.append(build_leftover_code_chunk(chunk_buffer, file_path, parsed))
                 chunk_buffer, buffer_size = [], 0
             chunk_buffer.append(node)
             buffer_size += node_size
         if chunk_buffer:
-            leftover_chunks.append(build_leftover_chunk(chunk_buffer, file_path, parsed))
+            leftover_chunks.append(build_leftover_code_chunk(chunk_buffer, file_path, parsed))
 
     import_text = "\n".join(node_text(node, parsed.content) for node in imports)
     import_ranges = [(node.start_byte, node.end_byte) for node in imports]
