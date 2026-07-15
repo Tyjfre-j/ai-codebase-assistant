@@ -23,6 +23,7 @@ class LanguageConfig:
     language: Language
     parser: Parser
     query: Query
+    ref_query: Query
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class ParsedFile:
     """Tree-sitter parse result plus the source bytes used to build it."""
     tree: Tree
     query: Query
+    ref_query: Query
     language: str
     content: bytes
 
@@ -37,21 +39,22 @@ class ParsedFile:
 def load_languages() -> dict[str, LanguageConfig]:
     """Load all supported tree-sitter grammars and compile their queries."""
     specs = [
-        # (extension, name, loader_function, query_string)
-        (".py", "python", tspython.language, LANG_HELPERS["python"].QUERY),
-        (".go", "go", tsgo.language, LANG_HELPERS["go"].QUERY),
-        (".ts", "typescript", tsts.language_typescript, LANG_HELPERS["typescript"].QUERY),
-        (".js", "javascript", tsjs.language, LANG_HELPERS["javascript"].QUERY),
+        # (extension, name, loader_function, query_string, ref_query_string)
+        (".py", "python", tspython.language, LANG_HELPERS["python"].QUERY, LANG_HELPERS["python"].REF_QUERY),
+        (".go", "go", tsgo.language, LANG_HELPERS["go"].QUERY, LANG_HELPERS["go"].REF_QUERY),
+        (".ts", "typescript", tsts.language_typescript, LANG_HELPERS["typescript"].QUERY, LANG_HELPERS["typescript"].REF_QUERY),
+        (".js", "javascript", tsjs.language, LANG_HELPERS["javascript"].QUERY, LANG_HELPERS["javascript"].REF_QUERY),
     ]
     configs: dict[str, LanguageConfig] = {}
-    for ext, name, loader_fn, query_str in specs:
+    for ext, name, loader_fn, query_str, ref_query_str in specs:
         try:
             lang = Language(loader_fn())
             parser = Parser(lang)
             query = Query(lang, query_str)
+            ref_query = Query(lang, ref_query_str)
         except Exception as e:
             raise LanguageLoadError(f"Failed to load language for extension {ext}: {e}") from e
-        configs[ext] = LanguageConfig(name=name, language=lang, parser=parser, query=query)
+        configs[ext] = LanguageConfig(name=name, language=lang, parser=parser, query=query, ref_query=ref_query)
     return configs
 
 
@@ -87,6 +90,7 @@ class CodeParser:
         return ParsedFile(
             tree=tree,
             query=lang_config.query,
+            ref_query=lang_config.ref_query,
             language=lang_config.name,
             content=content,
         )
