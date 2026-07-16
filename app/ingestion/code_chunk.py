@@ -63,6 +63,10 @@ class CodeChunk:
 
     size_chars: int  # How many characters of code this chunk holds.
 
+    parent_chunk_id: str | None = None  # chunk_id of the enclosing DEFINITION/CLASS_SKELETON/
+    # FUNCTION_SKELETON this chunk was carved out of (e.g. a LEFTOVER class field's enclosing
+    # class, or a nested def's enclosing oversized function). None for top-level chunks.
+
     references: list[RefRecord] = field(default_factory=list)  # Filled in later, once refs are extracted.
 
 
