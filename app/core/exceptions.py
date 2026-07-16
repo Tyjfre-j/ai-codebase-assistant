@@ -1,5 +1,3 @@
-
-
 class RepositoryError(Exception):
     """Base exception for repository operations."""
 
@@ -35,18 +33,18 @@ class TreeSitterParseError(IngestionError):
     """Raised when tree-sitter fails to parse a file's content."""
 
 class ChunkExtractionError(IngestionError):
-    """Raised when converting parsed captures into CodeChunks fails."""
+    """Raised when converting parsed captures into CodeChunks fails for one file."""
 
 class UnregisteredLanguageError(ChunkExtractionError):
     """Raised when a ParsedFile's language has no entry in LANG_HELPERS."""
 
 
-class InvalidChunkBudgetError(ChunkExtractionError):
-    """Raised when chunk_file is called with a non-positive budget."""
-
-
 class ChunkDecodeError(ChunkExtractionError):
     """Raised when a node's byte range can't be decoded as UTF-8 text."""
+
+
+class InvalidChunkBudgetError(IngestionError):
+    """Raised when chunk_file is called with a non-positive budget."""
 
 
 class MalformedSourceError(IngestionError):

@@ -2,20 +2,7 @@
 import os
 from pathlib import Path
 
-_SKIP_DIRS = {
-    ".git",
-    "node_modules",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "dist",
-    "build",
-    ".pytest_cache",
-    ".mypy_cache",
-    "target",
-    ".idea",
-    ".vscode",
-}
+from app.core.constants import _SKIP_DIRS
 
 
 def iter_source_files(root: str, extensions: set[str]):
