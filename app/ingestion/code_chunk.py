@@ -6,6 +6,7 @@ class ChunkKind:
 
     DEFINITION = "definition"
     CLASS_SKELETON = "class_skeleton"
+    FUNCTION_SKELETON = "function_skeleton"
     LEFTOVER = "leftover"
     MERGED_GROUP = "merged_group"
 

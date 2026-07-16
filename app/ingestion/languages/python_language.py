@@ -123,6 +123,18 @@ def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | 
                 return node_text(name_node, content)
     return None
 
+def get_namespace(def_node, captures: dict, content: bytes) -> list[str]:
+    """Walk up the AST and return the full namespace path (classes and functions)."""
+    namespace = []
+    current = def_node.parent
+    while current is not None:
+        if current.type in ("class_definition", "function_definition"):
+            name_node = current.child_by_field_name("name")
+            if name_node is not None:
+                namespace.append(node_text(name_node, content))
+        current = current.parent
+    return list(reversed(namespace))
+
 
 def get_class_member_stub_info(node, content: bytes):
     """For class-skeleton building: identify a method node and its stub signature."""

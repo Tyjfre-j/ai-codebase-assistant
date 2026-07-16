@@ -3,7 +3,7 @@ from tree_sitter import Node
 from app.core.constants import DEFAULT_CHUNK_BUDGET_CHARS
 from app.core.exceptions import InvalidChunkBudgetError, MalformedSourceError
 from app.ingestion.chunking.chunk_candidates import walk_top_level
-from app.ingestion.chunking.chunk_factory import build_class_skeleton_chunk, build_definition_chunk
+from app.ingestion.chunking.chunk_factory import build_class_skeleton_chunk, build_definition_chunk, build_function_skeleton_chunk
 from app.ingestion.chunking.leftover_chunks import group_leftovers
 from app.ingestion.chunking.query_captures import run_captures
 from app.ingestion.code_chunk import ChunkKind, CodeChunk
@@ -54,6 +54,8 @@ def chunk_file(
                 )
         elif candidate_kind == ChunkKind.CLASS_SKELETON:
             definition_chunks.append(build_class_skeleton_chunk(nodes[0], file_path, parsed))
+        elif candidate_kind == ChunkKind.FUNCTION_SKELETON:
+            definition_chunks.append(build_function_skeleton_chunk(nodes[0], file_path, parsed, captures))
         else:
             leftover_groups.append(nodes)
 
