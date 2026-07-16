@@ -1,14 +1,41 @@
 from dataclasses import dataclass, field
 
 
+class ChunkKind:
+    """The canonical set of values CodeChunk.kind can take."""
+
+    DEFINITION = "definition"
+    CLASS_SKELETON = "class_skeleton"
+    LEFTOVER = "leftover"
+    MERGED_GROUP = "merged_group"
+
+class RefKind:
+    """The values RefRecord.kind can take."""
+
+    CALL = "call"
+    INHERITANCE = "inheritance"
+
+class RefStatus:
+    """The values RefRecord.status can take."""
+
+    LOCAL = "local"
+    EXTERNAL = "external"  # not yet implemented anywhere
+    UNRESOLVED = "unresolved"
+
+class ImportKind:
+    """The values an import binding's kind can take."""
+
+    MODULE = "module"  # e.g. `import os` -> "os" binds the whole module
+    NAMED = "named"    # e.g. `from os import path` -> "path" binds one specific symbol
+
 @dataclass
 class RefRecord:
     """One reference (a call or an inheritance) found inside a chunk's code."""
 
     text: str  # What was literally written at the reference site, e.g. "get_user", "self.get_user", "Base".
-    kind: str  # "call" (this invokes something) or "inheritance" (this extends something).
+    kind: str  # RefKind.CALL (this invokes something) or RefKind.INHERITANCE (this extends something).
     points_to: str | None  # The chunk_id this reference resolves to, once we know it; None until then.
-    status: str = "unresolved"  # "local", "external" (not yet implemented), or "unresolved".
+    status: str = RefStatus.UNRESOLVED  # RefStatus.LOCAL, RefStatus.EXTERNAL (not yet implemented), or RefStatus.UNRESOLVED.
 
 @dataclass
 class CodeChunk:
@@ -29,8 +56,8 @@ class CodeChunk:
     docstring: str | None  # Reserved for later; always None for now.
 
     node_type: str | None  # The tree-sitter node type this came from, e.g. "function_definition".
-    kind: str  # "definition", "class_skeleton", "leftover", or "merged_group" -- what role this chunk plays.
-    merged_names: list[str] | None  # The original names bundled in here, if kind is "merged_group".
+    kind: str  # ChunkKind.DEFINITION / CLASS_SKELETON / LEFTOVER / MERGED_GROUP -- what role this chunk plays.
+    merged_names: list[str] | None  # The original names bundled in here, if kind is ChunkKind.MERGED_GROUP.
 
     size_chars: int  # How many characters of code this chunk holds.
 
@@ -45,5 +72,5 @@ class ParsedFileChunks:
     chunks: list[CodeChunk]  # Every chunk found in this file.
     import_text: str  # The raw text of this file's imports.
     import_ranges: list[tuple[int, int]]  # Where each import statement sits in the file.
-    import_bindings: dict[str, tuple[str | None, str]] = field(default_factory=dict)
+    import_bindings: dict[str, tuple[str | None, str, str]] = field(default_factory=dict)
     # Maps each name used in the code to (the file it actually comes from, or None; its original name).
