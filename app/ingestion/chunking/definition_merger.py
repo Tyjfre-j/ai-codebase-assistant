@@ -1,6 +1,7 @@
 from dataclasses import replace
 
-from app.ingestion.code_chunk import CodeChunk
+from app.ingestion.code_chunk import ChunkKind, CodeChunk
+from app.ingestion.source_text import stable_chunk_id
 
 MAX_GAP_BYTES = 2  # allowance for a blank line between mergeable siblings
 
@@ -11,7 +12,7 @@ def merge_adjacent_defs(chunks: list[CodeChunk], budget: int) -> list[CodeChunk]
     buffer: CodeChunk | None = None
 
     for chunk in chunks:
-        if chunk.kind == "class_skeleton":
+        if chunk.kind == ChunkKind.CLASS_SKELETON:
             if buffer is not None:
                 merged.append(buffer)
                 buffer = None
@@ -38,14 +39,18 @@ def combine_chunks(first: CodeChunk, second: CodeChunk) -> CodeChunk:
     ) + (
         second.merged_names or [second.name]
     )
+    combined_name = f"{first.name}+{second.name}"
+    combined_full_name = f"{first.full_name}+{second.full_name}"
     return replace(
         first,
+        chunk_id=stable_chunk_id(first.file_path, first.start_byte, combined_full_name),
         end_byte=second.end_byte,
         code=first.code + "\n" + second.code,
         size_chars=first.size_chars + second.size_chars + 1,
-        kind="merged_group",
+        kind=ChunkKind.MERGED_GROUP,
         merged_names=merged_names,
-        name=f"{first.name}+{second.name}",
-        full_name=f"{first.full_name}+{second.full_name}",
+        name=combined_name,
+        full_name=combined_full_name,
         node_type=None,
+        references=first.references + second.references,
     )
