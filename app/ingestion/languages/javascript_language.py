@@ -198,3 +198,15 @@ def get_class_skeleton_footer() -> str | None:
 
 def get_module_index_filename() -> str | None:
     return "index.js"
+
+BUILTINS = {
+    "console", "Math", "JSON", "Object", "Array", "String", "Number", "Boolean",
+    "Date", "RegExp", "Error", "Promise", "Map", "Set", "WeakMap", "WeakSet",
+    "Symbol", "Proxy", "Reflect", "parseInt", "parseFloat", "isNaN", "isFinite",
+    "decodeURI", "decodeURIComponent", "encodeURI", "encodeURIComponent",
+    "setTimeout", "clearTimeout", "setInterval", "clearInterval", "window",
+    "document", "fetch", "process", "require", "module", "exports"
+}
+
+def is_builtin(name: str) -> bool:
+    return name in BUILTINS

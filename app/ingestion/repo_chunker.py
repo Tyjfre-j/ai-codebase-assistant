@@ -43,7 +43,7 @@ def chunk_repository(
     for file_path in iter_source_files(root, extensions):
         path_check = validate_file_thru_path(file_path, max_size_mb)
         if not path_check.is_valid:
-            skipped.append(SkippedFile(file_path=file_path, reason=path_check.reason.value))
+            skipped.append(SkippedFile(file_path=file_path, reason=path_check.reason.value if path_check.reason else "unknown"))
             continue
 
         try:
@@ -56,7 +56,7 @@ def chunk_repository(
 
         content_check = validate_file_thru_content(file_path, content)
         if not content_check.is_valid:
-            skipped.append(SkippedFile(file_path=file_path, reason=content_check.reason.value))
+            skipped.append(SkippedFile(file_path=file_path, reason=content_check.reason.value if content_check.reason else "unknown"))
             continue
 
         try:

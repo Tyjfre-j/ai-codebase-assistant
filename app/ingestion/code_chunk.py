@@ -20,7 +20,8 @@ class RefStatus:
     """The values RefRecord.status can take."""
 
     LOCAL = "local"
-    EXTERNAL = "external"  # not yet implemented anywhere
+    EXTERNAL = "external"  # Third-party or standard library imports
+    BUILTIN = "builtin"    # Language built-ins like print, len, console.log
     UNRESOLVED = "unresolved"
 
 class ImportKind:

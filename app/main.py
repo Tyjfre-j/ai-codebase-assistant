@@ -7,24 +7,37 @@ from app.ingestion.repo_chunker import chunk_repository
 
 def run(root: str) -> None:
     parsed_chunks_list = chunk_repository(root)
-    total_chunks = sum(len(pc.chunks) for pc in parsed_chunks_list)
-    total_refs = sum(len(c.references) for pc in parsed_chunks_list for c in pc.chunks)
+    total_chunks = sum(len(pc.chunks) for pc in parsed_chunks_list.files)
+    total_refs = sum(len(c.references) for pc in parsed_chunks_list.files for c in pc.chunks)
     resolved = sum(
-        1 for pc in parsed_chunks_list for c in pc.chunks for ref in c.references
+        1 for pc in parsed_chunks_list.files for c in pc.chunks for ref in c.references
         if ref.status == RefStatus.LOCAL
     )
-    unresolved = total_refs - resolved
+    external = sum(
+        1 for pc in parsed_chunks_list.files for c in pc.chunks for ref in c.references
+        if ref.status == RefStatus.EXTERNAL
+    )
+    builtin = sum(
+        1 for pc in parsed_chunks_list.files for c in pc.chunks for ref in c.references
+        if ref.status == RefStatus.BUILTIN
+    )
+    unresolved = sum(
+        1 for pc in parsed_chunks_list.files for c in pc.chunks for ref in c.references
+        if ref.status == RefStatus.UNRESOLVED
+    )
 
-    print(f"Files parsed: {len(parsed_chunks_list)}")
+    print(f"Files parsed: {len(parsed_chunks_list.files)}")
     print(f"Total chunks: {total_chunks}")
     print(f"Total refs: {total_refs}")
     print(f"Resolved (local): {resolved}")
+    print(f"External: {external}")
+    print(f"Built-in: {builtin}")
     print(f"Unresolved: {unresolved}")
 
     # Print a few examples so you can sanity check by eye
     print("\n--- sample resolved refs ---")
     count = 0
-    for pc in parsed_chunks_list:
+    for pc in parsed_chunks_list.files:
         for c in pc.chunks:
             for ref in c.references:
                 if ref.status == RefStatus.LOCAL and count < 10:
@@ -33,7 +46,7 @@ def run(root: str) -> None:
 
     print("\n--- sample UNRESOLVED refs ---")
     count = 0
-    for pc in parsed_chunks_list:
+    for pc in parsed_chunks_list.files:
         for c in pc.chunks:
             for ref in c.references:
                 if ref.status == RefStatus.UNRESOLVED and count < 20:
@@ -41,11 +54,11 @@ def run(root: str) -> None:
                     count += 1
 
     print("\n--- unresolved breakdown ---")
-    own_symbol_names = {c.name for pc in parsed_chunks_list for c in pc.chunks if c.kind == ChunkKind.DEFINITION}
-    own_qualified_names = {c.full_name for pc in parsed_chunks_list for c in pc.chunks if c.kind == ChunkKind.DEFINITION}
+    own_symbol_names = {c.name for pc in parsed_chunks_list.files for c in pc.chunks if c.kind == ChunkKind.DEFINITION}
+    own_qualified_names = {c.full_name for pc in parsed_chunks_list.files for c in pc.chunks if c.kind == ChunkKind.DEFINITION}
 
     suspicious = []
-    for pc in parsed_chunks_list:
+    for pc in parsed_chunks_list.files:
         for c in pc.chunks:
             for ref in c.references:
                 if ref.status != RefStatus.UNRESOLVED:
