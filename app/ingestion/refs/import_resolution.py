@@ -3,7 +3,15 @@
 from pathlib import Path
 
 
-def resolve_relative_import(module_text: str, file_path: str) -> str | None:
+def resolve_relative_import(
+    module_text: str,
+    file_path: str,
+    file_extension: str,
+    index_filename: str | None,
+    *,
+    resolves_to_directory: bool = False,
+    path_uses_dots: bool = True,
+) -> str | None:
     """Resolve a relative import like '.db' or '..services' against the file that contains it."""
     dots = len(module_text) - len(module_text.lstrip("."))
     remainder = module_text[dots:]
@@ -13,38 +21,79 @@ def resolve_relative_import(module_text: str, file_path: str) -> str | None:
         base = base.parent
 
     if remainder:
-        base = base / remainder.replace(".", "/")
+        if path_uses_dots:
+            base = base / remainder.replace(".", "/")
+        else:
+            base = base / remainder
 
-    as_module = base.with_suffix(".py")
+    if resolves_to_directory:
+        return str(base) if base.is_dir() else None
+
+    as_module = base.with_suffix(file_extension)
     if as_module.exists():
         return str(as_module)
 
-    as_package = base / "__init__.py"
-    if as_package.exists():
-        return str(as_package)
+    if index_filename is not None:
+        as_package = base / index_filename
+        if as_package.exists():
+            return str(as_package)
 
     return None
 
 
-def resolve_absolute_import(module_text: str, project_root: str) -> str | None:
+def resolve_absolute_import(
+    module_text: str,
+    project_root: str,
+    file_extension: str,
+    index_filename: str | None,
+    *,
+    resolves_to_directory: bool = False,
+    path_uses_dots: bool = True,
+) -> str | None:
     """Resolve an absolute import like 'myapp.services' against the project root."""
-    base = Path(project_root) / module_text.replace(".", "/")
+    if path_uses_dots:
+        base = Path(project_root) / module_text.replace(".", "/")
+    else:
+        base = Path(project_root) / module_text
 
-    as_module = base.with_suffix(".py")
+    if resolves_to_directory:
+        return str(base) if base.is_dir() else None
+
+    as_module = base.with_suffix(file_extension)
     if as_module.exists():
         return str(as_module)
 
-    as_package = base / "__init__.py"
-    if as_package.exists():
-        return str(as_package)
+    if index_filename is not None:
+        as_package = base / index_filename
+        if as_package.exists():
+            return str(as_package)
 
     return None
 
 
 def resolve_import_path(
-    module_text: str, is_relative: bool, file_path: str, project_root: str
+    module_text: str,
+    is_relative: bool,
+    file_path: str,
+    project_root: str,
+    file_extension: str,
+    index_filename: str | None,
+    *,
+    resolves_to_directory: bool = False,
+    path_uses_dots: bool = True,
 ) -> str | None:
     """Dispatch to the relative or absolute resolver based on which capture the module came from."""
+    # Strip surrounding quotes (Go's interpreted_string_literal includes them).
+    module_text = module_text.strip("\"'`")
+
     if is_relative:
-        return resolve_relative_import(module_text, file_path)
-    return resolve_absolute_import(module_text, project_root)
+        return resolve_relative_import(
+            module_text, file_path, file_extension, index_filename,
+            resolves_to_directory=resolves_to_directory,
+            path_uses_dots=path_uses_dots,
+        )
+    return resolve_absolute_import(
+        module_text, project_root, file_extension, index_filename,
+        resolves_to_directory=resolves_to_directory,
+        path_uses_dots=path_uses_dots,
+    )
