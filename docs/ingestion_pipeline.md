@@ -13,8 +13,20 @@ The pipeline starts with `RepositoryCloner`, which safely clones a target git re
 
 ## 3. Parsing & Chunking
 Valid files are passed to `CodeParser` which loads the correct Tree-sitter grammar based on the language. The parsed syntax tree is handed to `chunk_file()` in `chunk_pipeline.py`.
-- **Definitions**: Functions, classes, and interfaces are extracted as definition chunks. Small adjacent definitions are merged.
-- **Leftovers**: Code outside of definitions (like global scripts or standalone module-level statements) is grouped into "leftover" chunks.
-- **Class Skeletons**: Synthetic zero-width chunks are generated for class definitions. They contain method stubs, allowing the retriever to see the overall class structure without pulling in every method implementation.
 
-Each definition chunk is assigned a stable ID (`stable_chunk_id`) for persistent indexing.
+### Walk Top Level & Chunk Candidates
+`walk_top_level()` explores the syntax tree starting from the root node. It identifies **definition candidates** (using capture IDs from the tree-sitter query) and separates them from non-definition nodes.
+- When it encounters a class definition, it emits a `CLASS_SKELETON` candidate, and then continues walking *inside* the class body to extract its individual methods as distinct definition candidates.
+- If a definition exceeds the chunk budget, `walk_top_level()` falls back to walking *inside* the definition, extracting nested classes/functions or producing a `FUNCTION_SKELETON`.
+
+### Chunk Building
+- **Definitions**: Functions, classes, and interfaces are extracted as `ChunkKind.DEFINITION`. `build_definition_chunk` extracts references and assigns a stable ID (`stable_chunk_id`) for persistent indexing.
+- **Leftovers**: Code outside of definitions (like global scripts, imports, or standalone module-level statements) is grouped into "leftover" chunks by `group_leftovers()`. Imports are also stripped out and stored separately (`import_text`, `import_ranges`).
+- **Class Skeletons**: Synthetic zero-width chunks (`ChunkKind.CLASS_SKELETON`) are generated for class definitions. They contain method stubs (name, decorators, parameters), allowing the retriever to see the overall class structure without pulling in every method implementation.
+
+### Output
+`chunk_file()` returns a tuple containing:
+1. `CodeChunk` objects representing the extracted codebase segments.
+2. `import_text`: The concatenated text of all import statements in the file.
+3. `import_ranges`: The byte ranges of those imports in the original source file.
+4. `captures`: The raw tree-sitter captures to be reused in the import-binding extraction phase.
