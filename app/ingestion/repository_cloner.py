@@ -12,7 +12,10 @@ from urllib.parse import urlparse
 
 from app.core.constants import (
     ALLOWED_REPOSITORY_HOSTS,
+    BYTES_PER_MB,
+    CLONE_ERROR_MESSAGE_MAX_CHARS,
     CLONE_TIMEOUT_SECONDS,
+    GIT_CLONE_FLAGS,
     MAX_REF_LENGTH,
     MAX_REPO_SIZE_MB,
 )
@@ -126,23 +129,22 @@ class RepositoryCloner:
             if self._tmpdir is not None:
                 shutil.rmtree(self._tmpdir, ignore_errors=True)
             raise
-
+        
     def _do_clone(self, repo_url: str, ref: str | None) -> ClonedRepo:
         clone_path = self._tmpdir
         if clone_path is None:
             raise RuntimeError("clone path was not initialized")
 
-        clone_command = [
-            "git",
-            "clone",
-            "--depth=1",
-            "--no-tags",
-            "--config",
-            "core.hooksPath=/dev/null",
-        ]
+        clone_command = ["git", "clone", *GIT_CLONE_FLAGS]
         if ref:
             clone_command += ["--branch", ref]
         clone_command += [repo_url, str(clone_path)]
+
+        # Re-validate DNS immediately before cloning to narrow the
+        # TOCTOU window for DNS rebinding attacks.  Not bulletproof (the
+        # hostname can still re-resolve between this check and git's own
+        # resolution), but significantly reduces the attack surface.
+        _validate_repo_url(repo_url, self._allowed_hosts)
 
         try:
             subprocess.run(
@@ -157,20 +159,19 @@ class RepositoryCloner:
             ) from exc
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.decode(errors="replace")
-            if (
-                "empty repository" in stderr.lower()
-                or "did not send all necessary objects" in stderr
-            ):
-                raise EmptyRepositoryError(
-                    f"Repository appears to be empty: {repo_url}"
-                ) from exc
             raise InvalidRepositoryURLError(
-                f"git clone failed: {stderr[:300]}"
+                f"git clone failed: {stderr[:CLONE_ERROR_MESSAGE_MAX_CHARS]}"
             ) from exc
 
-        files = [path for path in clone_path.rglob("*") if path.is_file()]
+        # Filter out symlinks: a malicious repo could contain symlinks to
+        # sensitive host files (/etc/passwd, /proc/self/environ, etc.).
+        # rglob follows symlinks by default, so we must explicitly skip them.
+        files = [
+            path for path in clone_path.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        ]
         size_bytes = sum(path.stat().st_size for path in files)
-        if size_bytes > self._max_repo_size_mb * 1024 * 1024:
+        if size_bytes > self._max_repo_size_mb * BYTES_PER_MB:
             raise RepositoryTooLargeError(
                 f"Repo size {size_bytes / 1e6:.1f} MB exceeds limit {self._max_repo_size_mb} MB"
             )
