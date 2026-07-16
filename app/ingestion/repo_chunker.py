@@ -1,9 +1,14 @@
 import logging
 
-from app.core.exceptions import MalformedSourceError, TreeSitterParseError
+from app.core.constants import DEFAULT_CHUNK_BUDGET_CHARS, DEFAULT_MAX_FILE_SIZE_MB
+from app.core.exceptions import (
+    ChunkExtractionError,
+    InvalidChunkBudgetError,
+    MalformedSourceError,
+    TreeSitterParseError,
+)
 from app.ingestion.chunking.chunk_pipeline import chunk_file
 from app.ingestion.code_chunk import ParsedFileChunks
-from app.ingestion.refs.extractor import populate_chunk_references_for_file
 from app.ingestion.refs.import_bindings import extract_import_bindings_for_file
 from app.ingestion.refs.resolver import resolve_all_chunk_references
 from app.ingestion.source_file_scanner import iter_source_files
@@ -16,8 +21,15 @@ from app.ingestion.source_parser import CodeParser
 logger = logging.getLogger(__name__)
 
 
-def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> list[ParsedFileChunks]:
+def chunk_repository(
+    root: str,
+    max_size_mb: int = DEFAULT_MAX_FILE_SIZE_MB,
+    budget: int = DEFAULT_CHUNK_BUDGET_CHARS,
+) -> list[ParsedFileChunks]:
     """Walk a repository, parse and chunk every supported source file, and collect per-file results."""
+    if budget <= 0:
+        raise InvalidChunkBudgetError(f"budget must be positive, got {budget}")
+
     parser = CodeParser()
     extensions = set(parser.language_configs.keys())
     results: list[ParsedFileChunks] = []
@@ -27,8 +39,12 @@ def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> lis
         if not path_check.is_valid:
             continue
 
-        with open(file_path, "rb") as f:
-            content = f.read()
+        try:
+            with open(file_path, "rb") as f:
+                content = f.read()
+        except OSError as e:
+            logger.warning("Skipping %s: %s", file_path, e)
+            continue
 
         content_check = validate_file_thru_content(file_path, content)
         if not content_check.is_valid:
@@ -36,10 +52,9 @@ def chunk_repository(root: str, max_size_mb: int = 5, budget: int = 1500) -> lis
 
         try:
             parsed = parser.parse_file(file_path, content)
-            chunks, import_text, import_ranges = chunk_file(file_path, parsed, budget)
-            populate_chunk_references_for_file(parsed, chunks)
-            import_bindings = extract_import_bindings_for_file(parsed, file_path, root)
-        except (MalformedSourceError, TreeSitterParseError) as e:
+            chunks, import_text, import_ranges, captures = chunk_file(file_path, parsed, budget)
+            import_bindings = extract_import_bindings_for_file(parsed, file_path, root, captures)
+        except (MalformedSourceError, TreeSitterParseError, ChunkExtractionError) as e:
             logger.warning("Skipping %s: %s", file_path, e)
             continue
 
