@@ -18,7 +18,19 @@ def build_definition_chunk(
     language_helpers = LANG_HELPERS[parsed.language]
     defined_in_class = language_helpers.get_enclosing_class_name(node, captures, parsed.content)
     name = language_helpers.get_definition_name(node, parsed.content)
-    full_name = f"{defined_in_class}.{name}" if defined_in_class else name
+    
+    get_namespace = getattr(language_helpers, "get_namespace", None)
+    if get_namespace:
+        namespace = get_namespace(node, captures, parsed.content)
+    else:
+        namespace = []
+
+    if namespace:
+        full_name = ".".join(namespace + [name])
+    elif defined_in_class:
+        full_name = f"{defined_in_class}.{name}"
+    else:
+        full_name = name
     code = node_text(node, parsed.content)
     references = extract_reference_records(node, parsed.content, parsed.ref_query)
 
@@ -84,7 +96,8 @@ def build_class_skeleton_chunk(
     parsed: ParsedFile,
 ) -> CodeChunk:
     """Build a compact class chunk that lists member signatures."""
-    class_name = node_text(class_node.child_by_field_name("name"), parsed.content)
+    name_node = class_node.child_by_field_name("name")
+    class_name = node_text(name_node, parsed.content) if name_node is not None else "<unknown>"
     language_helpers = LANG_HELPERS[parsed.language]
 
     get_header = getattr(language_helpers, "get_class_skeleton_header", None)
@@ -147,4 +160,52 @@ def build_class_skeleton_chunk(
         merged_names=None,
         size_chars=len(code),
         references=references,
+    )
+
+
+def build_function_skeleton_chunk(
+    func_node: Node,
+    file_path: str,
+    parsed: ParsedFile,
+    captures: dict[str, list[Node]],
+) -> CodeChunk:
+    """Build a compact function chunk that just lists its signature."""
+    language_helpers = LANG_HELPERS[parsed.language]
+    defined_in_class = language_helpers.get_enclosing_class_name(func_node, captures, parsed.content)
+    name = language_helpers.get_definition_name(func_node, parsed.content)
+
+    get_namespace = getattr(language_helpers, "get_namespace", None)
+    if get_namespace:
+        namespace = get_namespace(func_node, captures, parsed.content)
+    else:
+        namespace = []
+
+    if namespace:
+        full_name = ".".join(namespace + [name])
+    elif defined_in_class:
+        full_name = f"{defined_in_class}.{name}"
+    else:
+        full_name = name
+
+    body = func_node.child_by_field_name("body")
+    if body is not None:
+        code = node_text_range(func_node.start_byte, body.start_byte, parsed.content) + "..."
+    else:
+        code = node_text(func_node, parsed.content)
+
+    return CodeChunk(
+        chunk_id=stable_chunk_id(file_path, func_node.start_byte, full_name),
+        full_name=full_name,
+        name=name,
+        defined_in_class=defined_in_class,
+        file_path=file_path,
+        start_byte=func_node.start_byte,
+        end_byte=func_node.start_byte,
+        language=parsed.language,
+        code=code,
+        docstring=None,
+        node_type=None,
+        kind=ChunkKind.FUNCTION_SKELETON,
+        merged_names=None,
+        size_chars=len(code),
     )
