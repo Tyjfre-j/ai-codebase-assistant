@@ -15,9 +15,9 @@ Tree-sitter, and producing structured `CodeChunk` objects.
 - JavaScript
 - TypeScript
 
-Language support lives in `app/ingestion/languages/`. Each language module
-provides a Tree-sitter query plus small helper functions for resolving parent
-symbols and class/member stub information.
+Language support lives in `app/ingestion/languages/`. Each language module provides a Tree-sitter query plus small helper functions for resolving parent symbols and class/member stub information.
+
+> For more details on language features, see [Supported Languages](docs/supported_languages.md).
 
 ## Project Layout
 
@@ -54,7 +54,7 @@ The intended flow is:
 4. Parse the file with `CodeParser`.
 5. Chunk the parsed file with `chunk_file`.
 6. Extract import bindings and raw references for each chunk.
-7. Resolve references against same-file, import, and global targets.
+7. Resolve references against same-file, import, and global targets (see [Reference Resolution](docs/reference_resolution.md)).
 8. Later pipeline stages can embed, store, and retrieve the resulting chunks.
 
 The repo has a temporary CLI entry point in `app/main.py`, but it does not yet
@@ -146,22 +146,24 @@ Lint the ingestion package with:
 uv run ruff check app/ingestion
 ```
 
+## Documentation
+
+See the `docs/` folder for deeper architectural details:
+- [Ingestion Pipeline](docs/ingestion_pipeline.md)
+- [Reference Resolution](docs/reference_resolution.md)
+- [Supported Languages](docs/supported_languages.md)
+
 ## Current Gaps
 
-- No production ingest service yet wires clone, scan, validate, parse, chunk,
-  embed, and store into one flow.
-- Reference extraction currently has a Python implementation; Go, JavaScript,
-  and TypeScript still use empty `REF_QUERY` strings.
+- No production ingest service yet wires clone, scan, validate, parse, chunk, embed, and store into one flow (currently tested via `app/main.py` CLI).
 - Embedding generation and vector storage are not wired to chunking yet.
-- Chunk output is returned as definitions first and leftovers second, not sorted
-  globally by source order.
+- Chunk output is returned as definitions first and leftovers second, not sorted globally by source order.
 - `docstring` exists on `CodeChunk` but is currently always `None`.
 
 ## Next Steps
 
-1. Add an orchestration layer for full repository ingestion.
-2. Fill out reference extraction queries for all supported languages.
-3. Generate embeddings for chunk content.
-4. Store chunks and embeddings in Qdrant.
-5. Add incremental re-indexing based on stable ids and content hashes.
-6. Build retrieval and answering endpoints.
+1. Add an orchestration layer for full repository ingestion (API/Queue triggers).
+2. Generate embeddings for chunk content.
+3. Store chunks and embeddings in Qdrant.
+4. Add incremental re-indexing based on stable ids and content hashes.
+5. Build retrieval and answering endpoints.
