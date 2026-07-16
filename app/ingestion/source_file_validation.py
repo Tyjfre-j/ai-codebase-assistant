@@ -14,16 +14,16 @@ class InvalidFileReason(str, Enum):
     BINARY = "binary"
     MINIFIED = "minified"
 
-_TEXT_CHARACTERS = bytearray({7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)))
-_BINARY_SAMPLE_SIZE = 1024
-_MINIFIED_FILENAME_SUFFIX = ".min"
-_MINIFIED_SAMPLE_SIZE = 8192
+_TEXT_CHARACTERS = bytearray({7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100))) # All bytes except NUL (0x00) and DEL (0x7F) are text.
+_BINARY_SAMPLE_SIZE = 1024 # Sample size in bytes to check for binary content.
+_MINIFIED_FILENAME_SUFFIX = ".min" # Files with this suffix are automatically considered minified, regardless of their content.
+_MINIFIED_SAMPLE_SIZE = 8192 # Sample size in bytes to check for minified content
 _MIN_LINES_FOR_CHECK = 10      # too few lines to judge reliably, don't flag
 _LONG_LINE_THRESHOLD = 200     # a single "long" line, in chars
 _LONG_LINE_RATIO = 0.7         # most lines in the sample must be long
 _MIN_AVG_LINE_LENGTH = 200     # AND the average must also be high
 
-
+# check if file is empty 
 def is_file_empty(file_path: str) -> bool:
     """Check if a file is empty."""
     try:
@@ -31,7 +31,7 @@ def is_file_empty(file_path: str) -> bool:
     except OSError as e:
         raise FileAccessError(f"Error checking file size for {file_path}: {e}") from e
 
-
+# check if file is oversized
 def is_file_oversized(file_path: str, max_size_mb: int) -> bool:
     """Check if a file exceeds the maximum allowed size in megabytes."""
     try:
@@ -40,7 +40,7 @@ def is_file_oversized(file_path: str, max_size_mb: int) -> bool:
     except OSError as e:
         raise FileAccessError(f"Error checking file size for {file_path}: {e}") from e
 
-
+# check if file is binary
 def is_file_binary(content: bytes) -> bool:
     """Check if content is binary: NUL byte, or any non-text byte present."""
     sample = content[:_BINARY_SAMPLE_SIZE]
@@ -51,7 +51,7 @@ def is_file_binary(content: bytes) -> bool:
     nontext = sample.translate(None, _TEXT_CHARACTERS)
     return bool(nontext)
 
-
+# check if file is minified
 def is_file_minified(file_path: str, content: bytes) -> bool:
     """Check if content looks minified: dense, few-lined, consistently long lines."""
     if Path(file_path).stem.endswith(_MINIFIED_FILENAME_SUFFIX):
@@ -91,7 +91,7 @@ class ValidationResult:
     is_valid: bool
     reason: InvalidFileReason | None
 
-
+# check if file is valid through path
 def validate_file_thru_path(file_path: str, max_size_mb: int) -> ValidationResult:
     """Check path-based eligibility rules using the file path."""
     if is_file_empty(file_path):
@@ -100,7 +100,7 @@ def validate_file_thru_path(file_path: str, max_size_mb: int) -> ValidationResul
         return ValidationResult(is_valid=False, reason=InvalidFileReason.OVERSIZED)
     return ValidationResult(is_valid=True, reason=None)
 
-
+# check if file is valid through content
 def validate_file_thru_content(file_path: str, content: bytes) -> ValidationResult:
     """Check content-based eligibility rules using already-read bytes."""
     if is_file_binary(content):

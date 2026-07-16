@@ -36,10 +36,11 @@ class ClonedRepo:
     repo_url: str
     size_bytes: int
 
-
+# Regex for validating git refs
+# must start with alphanumeric, and can contain alphanumerics, dots, underscores, slashes, or hyphens, up to MAX_REF_LENGTH characters.
 _REF_RE = re.compile(rf'^[a-zA-Z0-9][a-zA-Z0-9._/\-]{{0,{MAX_REF_LENGTH}}}$')
 
-
+# Utility function to extract the host from a repository URL.
 def _extract_host_from_url(repo_url: str) -> str:
     """Extract the repository host from an allowed URL shape."""
     parsed_url = urlparse(repo_url)
@@ -57,7 +58,7 @@ def _extract_host_from_url(repo_url: str) -> str:
         f"Scheme not allowed. Only https and git@ are allowed. Got: {repo_url!r}"
     )
 
-
+# Utility function to validate repository URLs 
 def _validate_repo_url(repo_url: str, allowed_hosts: list[str]) -> None:
     """Reject unsupported hosts and hosts resolving to blocked IP ranges."""
     host = _extract_host_from_url(repo_url)
@@ -80,7 +81,7 @@ def _validate_repo_url(repo_url: str, allowed_hosts: list[str]) -> None:
             f"Host '{host}' resolves to a blocked IP address: {ip_str}"
         )
 
-
+# Utility function to validate git refs
 def _validate_ref(ref: str) -> None:
     """Reject git refs that could be interpreted as flags or unsafe names."""
     if ref.startswith("-"):
@@ -131,13 +132,21 @@ class RepositoryCloner:
             raise
         
     def _do_clone(self, repo_url: str, ref: str | None) -> ClonedRepo:
+        """Perform the actual git clone operation and return metadata."""
+        # initialize the clone path to the temporary directory created in __enter__
         clone_path = self._tmpdir
         if clone_path is None:
             raise RuntimeError("clone path was not initialized")
-
+        
+        # Build the git clone command with optional ref and flags
+        # check app/core/constants.py for details on GIT_CLONE_FLAGS
         clone_command = ["git", "clone", *GIT_CLONE_FLAGS]
+
+        # If a ref is provided, add it to the clone command with --branch
         if ref:
             clone_command += ["--branch", ref]
+        
+        # Add the repository URL and the clone path to the command
         clone_command += [repo_url, str(clone_path)]
 
         # Re-validate DNS immediately before cloning to narrow the
@@ -145,8 +154,9 @@ class RepositoryCloner:
         # hostname can still re-resolve between this check and git's own
         # resolution), but significantly reduces the attack surface.
         _validate_repo_url(repo_url, self._allowed_hosts)
-
+        
         try:
+            # Run the git clone command with a timeout and capture output for error reporting
             subprocess.run(
                 clone_command,
                 check=True,
@@ -171,12 +181,16 @@ class RepositoryCloner:
             if path.is_file() and not path.is_symlink()
         ]
         size_bytes = sum(path.stat().st_size for path in files)
+
+        # Check the total size of the cloned repository against the maximum allowed size
         if size_bytes > self._max_repo_size_mb * BYTES_PER_MB:
             raise RepositoryTooLargeError(
                 f"Repo size {size_bytes / 1e6:.1f} MB exceeds limit {self._max_repo_size_mb} MB"
             )
 
         try:
+            # Get the current commit SHA of the cloned repository to ensure we have a valid checkout
+            # This is done by running 'git rev-parse HEAD' in the cloned directory
             result = subprocess.run(
                 ["git", "-C", str(clone_path), "rev-parse", "HEAD"],
                 check=True,
