@@ -34,18 +34,19 @@ def _walk(
     memo: dict[int, bool],
 ) -> list[tuple[str, list[Node]]]:
     """Classify a subtree as a definition, skeleton, leftover, or children."""
+    # If this node is a captured definition, it can be a real definition chunk,
     if node.id in definition_ids:
+        # if it's a class make a class skeleton chunk and go thru it's children
         if node.type in class_node_types:
-            # Classes always get a skeleton + recurse into children, regardless
-            # of size, so methods are always individually chunked.
             return [(ChunkKind.CLASS_SKELETON, [node])] + _walk_children(
                 node, definition_ids, budget, class_node_types, memo
             )
-
+        # if it's not a class, check if it's oversized. If not, make a definition chunk.
         size = node.end_byte - node.start_byte
         if size <= budget:
             return [(ChunkKind.DEFINITION, [node])]
-
+        
+        # if it's oversized, check if it has any nested definitions. If so, make a function skeleton chunk and go thru it's children.
         if any(_contains_definition(child, definition_ids, memo) for child in node.children):
             # oversized, but has a nested named def (e.g. a nested function) —
             # keep its signature as a skeleton to preserve its identity and namespace,
@@ -59,7 +60,10 @@ def _walk(
         # It'll exceed `budget`, but that's preferable to losing its name,
         # parent_symbol, and chunk_kind entirely.
         return [(ChunkKind.DEFINITION, [node])]
-
+    
+    # This node is not a captured definition.
+    # If none of its descendants are definitions either, the whole subtree
+    # becomes a leftover chunk.
     if not _contains_definition(node, definition_ids, memo):
         return [(ChunkKind.LEFTOVER, [node])]
 

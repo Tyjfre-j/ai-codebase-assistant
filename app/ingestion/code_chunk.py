@@ -4,25 +4,25 @@ from dataclasses import dataclass, field
 class ChunkKind:
     """The canonical set of values CodeChunk.kind can take."""
 
-    DEFINITION = "definition"
-    CLASS_SKELETON = "class_skeleton"
-    FUNCTION_SKELETON = "function_skeleton"
-    LEFTOVER = "leftover"
-    MERGED_GROUP = "merged_group"
+    DEFINITION = "definition" # A function or methods of class or interface
+    CLASS_SKELETON = "class_skeleton" # A synthetic chunk representing a class's skeleton, with no code of its own.
+    FUNCTION_SKELETON = "function_skeleton" # A synthetic chunk representing a function's skeleton, with no code of its own.
+    LEFTOVER = "leftover" # Code that doesn't fit into any other category.
+    MERGED_GROUP = "merged_group" # A group of chunks that have been merged together.
 
 class RefKind:
     """The values RefRecord.kind can take."""
 
-    CALL = "call"
+    CALL = "call" # This reference is a function or method call.
     INHERITANCE = "inheritance"
 
 class RefStatus:
     """The values RefRecord.status can take."""
 
-    LOCAL = "local"
+    LOCAL = "local" # This reference points to a chunk defined in the same repository.
     EXTERNAL = "external"  # Third-party or standard library imports
     BUILTIN = "builtin"    # Language built-ins like print, len, console.log
-    UNRESOLVED = "unresolved"
+    UNRESOLVED = "unresolved" # This reference could not be resolved to any known chunk in the repository.
 
 class ImportKind:
     """The values an import binding's kind can take."""

@@ -97,7 +97,6 @@ def unwrap_decorated_definition_node(def_node):
     """Return TypeScript definitions as-is because no wrapper is normalized here."""
     return def_node
 
-
 def _unwrap_arrow_field(definition_node):
     """If this arrow function is the value of a public class field, return the
     enclosing public_field_definition node — that's what's parented under class_body."""
@@ -109,14 +108,12 @@ def _unwrap_arrow_field(definition_node):
         return definition_node.parent
     return definition_node
 
-
 def get_definition_name(node, content: bytes) -> str:
     """Pull the identifier name out of a function/method/arrow-field definition node."""
     name_node = node.child_by_field_name("name") or node.child_by_field_name("property")
     if name_node is None:
         return "<anonymous>"
     return node_text(name_node, content)
-
 
 def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
     """Return the owning class for TS methods and public-field arrow functions."""
@@ -135,7 +132,6 @@ def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | 
         return None
     return node_text(name_node, content)
 
-
 def get_namespace(def_node, captures: dict, content: bytes) -> list[str]:
     """Walk up the AST and return the full namespace path."""
     namespace = []
@@ -150,7 +146,6 @@ def get_namespace(def_node, captures: dict, content: bytes) -> list[str]:
                 namespace.append(node_text(name_node, content))
         current = current.parent
     return list(reversed(namespace))
-
 
 def get_class_member_stub_info(node, content: bytes):
     """Return a class-member signature for TypeScript class skeleton chunks.
