@@ -1,3 +1,8 @@
+import tree_sitter_python as _ts_python
+from tree_sitter import Language
+
+from app.ingestion.source_text import node_text
+
 QUERY = """
 (function_definition
   name: (identifier) @func.name
@@ -76,6 +81,28 @@ REF_QUERY = """
 
 CLASS_NODE_TYPES = {"class_definition"}
 WRAPPER_TYPES = {"function_definition", "class_definition"}
+FILE_EXTENSION = ".py"
+
+
+def get_language() -> Language:
+    return Language(_ts_python.language())
+
+def _unwrap_to_function_definition(node):
+    """If node is a decorated_definition wrapping a function, return the inner
+    function_definition node. Returns the node itself if it's already a bare
+    function_definition, or None if neither applies."""
+    if node.type == "decorated_definition":
+        return node.child_by_field_name("definition")
+    return node if node.type == "function_definition" else None
+
+
+def get_definition_name(node, content: bytes) -> str:
+    """Pull the identifier name out of a (possibly decorator-wrapped) definition node."""
+    target = _unwrap_to_function_definition(node) or node
+    name_node = target.child_by_field_name("name")
+    if name_node is None:
+        return "<anonymous>"
+    return node_text(name_node, content)
 
 
 def unwrap_decorated_definition_node(def_node):
@@ -87,8 +114,6 @@ def unwrap_decorated_definition_node(def_node):
 
 def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
     """Return the owning class name for Python methods."""
-    from app.ingestion.source_text import node_text
-
     parent = def_node.parent
     if parent is not None and parent.type == "block":
         grandparent = parent.parent
@@ -101,28 +126,29 @@ def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | 
 
 def get_class_member_stub_info(node, content: bytes):
     """For class-skeleton building: identify a method node and its stub signature."""
-    from app.ingestion.source_text import node_text
-
-    function_node = None
-    decorators: list[str] = []
-
-    if node.type == "decorated_definition":
-        inner = node.child_by_field_name("definition")
-        if inner is not None and inner.type == "function_definition":
-            function_node = inner
-            decorators = [
-                node_text(child, content)
-                for child in node.children
-                if child.type == "decorator"
-            ]
-    elif node.type == "function_definition":
-        function_node = node
-
+    function_node = _unwrap_to_function_definition(node)
     if function_node is None:
         return None
+
+    decorators: list[str] = []
+    if node.type == "decorated_definition":
+        decorators = [
+            node_text(child, content)
+            for child in node.children
+            if child.type == "decorator"
+        ]
 
     name = node_text(function_node.child_by_field_name("name"), content)
     params = node_text(function_node.child_by_field_name("parameters"), content)
     prefix = "async def" if any(child.type == "async" for child in function_node.children) else "def"
 
     return {"name": name, "params": params, "decorators": decorators, "prefix": prefix}
+
+def get_class_skeleton_header(name: str) -> str:
+    return f"class {name}:"
+
+def get_class_skeleton_footer() -> str | None:
+    return None
+
+def get_module_index_filename() -> str | None:
+    return "__init__.py"

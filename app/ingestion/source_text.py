@@ -2,44 +2,25 @@ import hashlib
 
 from tree_sitter import Node
 
+from app.core.constants import CHUNK_ID_HEX_LENGTH
 from app.core.exceptions import ChunkDecodeError
 
 
-def node_text(node: Node, content: bytes) -> str:
-    try:
-        return content[node.start_byte:node.end_byte].decode("utf-8")
-    except UnicodeDecodeError as e:
-        raise ChunkDecodeError(
-            f"Failed to decode bytes {node.start_byte}-{node.end_byte} "
-            f"(node type={node.type}): {e}"
-        ) from e
-
-
 def node_text_range(start: int, end: int, content: bytes) -> str:
+    """Return the UTF-8 string for a byte range in the source content."""
     try:
         return content[start:end].decode("utf-8")
     except UnicodeDecodeError as e:
         raise ChunkDecodeError(f"Failed to decode bytes {start}-{end}: {e}") from e
 
-
-def extract_definition_name(node: Node, content: bytes) -> str:
-    """Pull the identifier name out of a (possibly decorator-wrapped) definition node."""
-    target = node
-    if node.type == "decorated_definition":
-        target = node.child_by_field_name("definition") or node
-
-    name_node = target.child_by_field_name("name")
-    if name_node is None:
-        # field_definition (class field arrow functions, e.g. `bar = () => {}`)
-        # uses `property` instead of `name` for the identifier.
-        name_node = target.child_by_field_name("property")
-
-    if name_node is None:
-        return "<anonymous>"
-    return node_text(name_node, content)
-
+def node_text(node: Node, content: bytes) -> str:
+    """Return the UTF-8 string for a node's byte range in the source content."""
+    try:
+        return node_text_range(node.start_byte, node.end_byte, content)
+    except ChunkDecodeError as e:
+        raise ChunkDecodeError(f"{e} (node type={node.type})") from e
 
 def stable_chunk_id(file_path: str, start_byte: int, full_name: str) -> str:
     """Deterministic id: stable across re-runs unless the chunk moves or is renamed."""
     raw = f"{file_path}:{start_byte}:{full_name}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:CHUNK_ID_HEX_LENGTH]
