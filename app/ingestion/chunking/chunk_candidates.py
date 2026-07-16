@@ -48,8 +48,11 @@ def _walk(
 
         if any(_contains_definition(child, definition_ids, memo) for child in node.children):
             # oversized, but has a nested named def (e.g. a nested function) —
-            # recurse to find it instead of losing this node's identity
-            return _walk_children(node, definition_ids, budget, class_node_types, memo)
+            # keep its signature as a skeleton to preserve its identity and namespace,
+            # then recurse into its body.
+            return [(ChunkKind.FUNCTION_SKELETON, [node])] + _walk_children(
+                node, definition_ids, budget, class_node_types, memo
+            )
 
         # oversized with nothing nested to split around — keep this as a real
         # definition chunk rather than demoting it to an anonymous leftover.

@@ -3,14 +3,15 @@ import pytest
 from app.ingestion.chunking.query_captures import run_captures
 from app.ingestion.languages import DEF_CAPTURES, LANG_HELPERS
 from app.ingestion.source_parser import CodeParser
-from app.ingestion.source_text import extract_definition_name
+
 parser = CodeParser()
 
 
 def _find_def_by_name(parsed, captures, name):
+    helpers = LANG_HELPERS[parsed.language]
     for cap in DEF_CAPTURES:
         for node in captures.get(cap, []):
-            if extract_definition_name(node, parsed.content) == name:
+            if helpers.get_definition_name(node, parsed.content) == name:
                 return node
     raise AssertionError(f"no definition named {name!r} found in captures")
 
