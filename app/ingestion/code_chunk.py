@@ -75,3 +75,22 @@ class ParsedFileChunks:
     import_ranges: list[tuple[int, int]]  # Where each import statement sits in the file.
     import_bindings: dict[str, tuple[str | None, str, str]] = field(default_factory=dict)
     # Maps each name used in the code to (the file it actually comes from, or None; its original name).
+
+@dataclass
+class SkippedFile:
+    """One file that didn't make it into the chunk output, and why."""
+    file_path: str
+    reason: str  # "empty", "oversized", "binary", "minified", an OSError, or an exception class name.
+
+
+@dataclass
+class RepositoryChunkResult:
+    """Everything `chunk_repository` produces: successful per-file results plus a skip summary."""
+    files: list[ParsedFileChunks]
+    skipped: list[SkippedFile]
+
+    def skip_counts_by_reason(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for skipped_file in self.skipped:
+            counts[skipped_file.reason] = counts.get(skipped_file.reason, 0) + 1
+        return counts

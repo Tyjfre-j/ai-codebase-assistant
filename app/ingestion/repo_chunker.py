@@ -8,7 +8,7 @@ from app.core.exceptions import (
     TreeSitterParseError,
 )
 from app.ingestion.chunking.chunk_pipeline import chunk_file
-from app.ingestion.code_chunk import ParsedFileChunks
+from app.ingestion.code_chunk import ParsedFileChunks, RepositoryChunkResult, SkippedFile
 from app.ingestion.refs.import_bindings import extract_import_bindings_for_file
 from app.ingestion.refs.resolver import resolve_all_chunk_references
 from app.ingestion.source_file_scanner import iter_source_files
@@ -25,18 +25,25 @@ def chunk_repository(
     root: str,
     max_size_mb: int = DEFAULT_MAX_FILE_SIZE_MB,
     budget: int = DEFAULT_CHUNK_BUDGET_CHARS,
-) -> list[ParsedFileChunks]:
-    """Walk a repository, parse and chunk every supported source file, and collect per-file results."""
+) -> RepositoryChunkResult:
+    """Walk a repository, parse and chunk every supported source file, and collect per-file results.
+
+    Returns both the successful results and a per-file skip summary — a repo
+    that silently drops a large fraction of its files (e.g. from a grammar
+    edge case) should be visible to the caller without grepping logs.
+    """
     if budget <= 0:
         raise InvalidChunkBudgetError(f"budget must be positive, got {budget}")
 
     parser = CodeParser()
     extensions = set(parser.language_configs.keys())
     results: list[ParsedFileChunks] = []
+    skipped: list[SkippedFile] = []
 
     for file_path in iter_source_files(root, extensions):
         path_check = validate_file_thru_path(file_path, max_size_mb)
         if not path_check.is_valid:
+            skipped.append(SkippedFile(file_path=file_path, reason=path_check.reason.value))
             continue
 
         try:
@@ -44,10 +51,12 @@ def chunk_repository(
                 content = f.read()
         except OSError as e:
             logger.warning("Skipping %s: %s", file_path, e)
+            skipped.append(SkippedFile(file_path=file_path, reason=type(e).__name__))
             continue
 
         content_check = validate_file_thru_content(file_path, content)
         if not content_check.is_valid:
+            skipped.append(SkippedFile(file_path=file_path, reason=content_check.reason.value))
             continue
 
         try:
@@ -56,6 +65,7 @@ def chunk_repository(
             import_bindings = extract_import_bindings_for_file(parsed, file_path, root, captures)
         except (MalformedSourceError, TreeSitterParseError, ChunkExtractionError) as e:
             logger.warning("Skipping %s: %s", file_path, e)
+            skipped.append(SkippedFile(file_path=file_path, reason=type(e).__name__))
             continue
 
         results.append(ParsedFileChunks(
@@ -68,4 +78,14 @@ def chunk_repository(
 
     resolve_all_chunk_references(results)
 
-    return results
+    result = RepositoryChunkResult(files=results, skipped=skipped)
+
+    if skipped:
+        counts = result.skip_counts_by_reason()
+        logger.warning(
+            "Skipped %d file(s) during ingestion: %s",
+            len(skipped),
+            ", ".join(f"{reason}={count}" for reason, count in counts.items()),
+        )
+
+    return result

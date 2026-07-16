@@ -80,7 +80,6 @@ REF_QUERY = """
 """
 
 CLASS_NODE_TYPES = {"class_definition"}
-WRAPPER_TYPES = {"function_definition", "class_definition"}
 FILE_EXTENSION = ".py"
 
 
