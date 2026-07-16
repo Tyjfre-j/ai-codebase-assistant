@@ -21,19 +21,28 @@ def group_leftovers(
     leftover_chunks: list[CodeChunk] = []
 
     for group in leftover_groups:
-        group_imports = [node for node in group if node.id in import_ids]
-        group_other = [node for node in group if node.id not in import_ids]
-        imports.extend(group_imports)
+        imports.extend(node for node in group if node.id in import_ids)
+        segments: list[list[Node]] = []
+        current_segment: list[Node] = []
+        for node in group:
+            if node.id in import_ids:
+                if current_segment:
+                    segments.append(current_segment)
+                    current_segment = []
+                continue
+            current_segment.append(node)
+        if current_segment:
+            segments.append(current_segment)
 
-        chunk_buffer: list[Node] = []
+        chunk_buffer: list[list[Node]] = []
         buffer_size = 0
-        for node in group_other:
-            node_size = node.end_byte - node.start_byte
-            if chunk_buffer and buffer_size + node_size > budget:
+        for segment in segments:
+            segment_size = segment[-1].end_byte - segment[0].start_byte
+            if chunk_buffer and buffer_size + segment_size > budget:
                 leftover_chunks.append(build_leftover_code_chunk(chunk_buffer, file_path, parsed))
                 chunk_buffer, buffer_size = [], 0
-            chunk_buffer.append(node)
-            buffer_size += node_size
+            chunk_buffer.append(segment)
+            buffer_size += segment_size
         if chunk_buffer:
             leftover_chunks.append(build_leftover_code_chunk(chunk_buffer, file_path, parsed))
 

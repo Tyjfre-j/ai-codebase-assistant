@@ -34,11 +34,17 @@ def run_captures(parsed: ParsedFile) -> dict[str, list[Node]]:
             language_helpers.unwrap_decorated_definition_node(node)
             for node in captures_by_name[definition_capture]
         ]
-        seen: set[int] = set()
+        # Dedup by logical span (start_byte, end_byte, node.type) rather than
+        # node.id: node.id only guards against the exact same Node object
+        # appearing twice. Two different query patterns can independently
+        # match and unwrap to distinct Node objects that nonetheless denote
+        # the same source definition; those must collapse to one chunk too.
+        seen: set[tuple[int, int, str]] = set()
         unique_nodes: list[Node] = []
         for node in resolved_nodes:
-            if node.id not in seen:
-                seen.add(node.id)
+            key = (node.start_byte, node.end_byte, node.type)
+            if key not in seen:
+                seen.add(key)
                 unique_nodes.append(node)
         captures_by_name[definition_capture] = unique_nodes
 
