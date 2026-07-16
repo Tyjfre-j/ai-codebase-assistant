@@ -8,7 +8,7 @@ def _add_to_index(index: dict[str, list[str]], name: str, chunk_id: str) -> None
     if chunk_id not in bucket:
         bucket.append(chunk_id)
 
-RESOLVABLE_KINDS = (ChunkKind.DEFINITION, ChunkKind.CLASS_SKELETON)
+RESOLVABLE_KINDS = (ChunkKind.DEFINITION, ChunkKind.CLASS_SKELETON, ChunkKind.FUNCTION_SKELETON)
 
 def build_definition_index(chunks: list[CodeChunk]) -> dict[str, list[str]]:
     """Aggregate definition/class-chunk names into a name -> chunk_id(s) index."""
@@ -41,11 +41,11 @@ def build_inheritance_graph(
     all_chunks: list[CodeChunk],
     chunk_by_id: dict[str, CodeChunk],
 ) -> dict[str, list[str]]:
-    """Build class_name -> [parent_class_name, ...] from resolved inheritance refs.
+    """Build class_chunk_id -> [parent_chunk_id, ...] from resolved inheritance refs.
 
     Uses the already-extracted INHERITANCE references on CLASS_SKELETON chunks.
-    Each resolved ref's ``points_to`` is a chunk_id; we look that up to recover
-    the parent class name and build the graph.
+    Each resolved ref's ``points_to`` is a chunk_id; we use that directly to build
+    the graph.
     """
     graph: dict[str, list[str]] = {}
     for chunk in all_chunks:
@@ -54,11 +54,9 @@ def build_inheritance_graph(
         parents: list[str] = []
         for ref in chunk.references:
             if ref.kind == RefKind.INHERITANCE and ref.points_to is not None:
-                parent_chunk = chunk_by_id.get(ref.points_to)
-                if parent_chunk is not None:
-                    parents.append(parent_chunk.name)
+                parents.append(ref.points_to)
         if parents:
-            graph[chunk.name] = parents
+            graph[chunk.chunk_id] = parents
     return graph
 
 
@@ -67,34 +65,50 @@ def _resolve_self_reference(
     chunk: CodeChunk,
     symbol_index: dict[str, list[str]],
     inheritance_graph: dict[str, list[str]],
+    file_symbol_index: dict[str, dict[str, list[str]]],
+    chunk_by_id: dict[str, CodeChunk],
 ) -> str | None:
     """Resolve self./cls./this. references, walking the inheritance chain if needed.
 
     For ``self.foo()`` in class ``Child``, this first checks ``Child.foo``.
     If not found and ``Child`` inherits from ``Base``, it checks ``Base.foo``,
-    and so on up the MRO-like chain (BFS, with cycle protection).
+    and so on up the MRO-like chain (BFS, with cycle protection) using exact chunk IDs.
     """
     for prefix in ("self.", "cls.", "this."):
         if text.startswith(prefix) and chunk.defined_in_class:
             rest = text[len(prefix):]
 
-            # Try current class first.
-            candidates = symbol_index.get(f"{chunk.defined_in_class}.{rest}", [])
+            # Try current class first. Prefer same-file resolution to avoid ambiguity.
+            candidates = file_symbol_index.get(chunk.file_path, {}).get(f"{chunk.defined_in_class}.{rest}", [])
+            if len(candidates) != 1:
+                candidates = symbol_index.get(f"{chunk.defined_in_class}.{rest}", [])
             if len(candidates) == 1:
                 return candidates[0]
 
-            # Walk the inheritance chain (BFS).
-            visited: set[str] = {chunk.defined_in_class}
-            queue: deque[str] = deque(inheritance_graph.get(chunk.defined_in_class, []))
+            # Find the exact chunk_id for the current class
+            class_candidates = file_symbol_index.get(chunk.file_path, {}).get(chunk.defined_in_class, [])
+            if len(class_candidates) != 1:
+                continue
+            class_chunk_id = class_candidates[0]
+
+            # Walk the inheritance chain (BFS) using chunk IDs.
+            visited: set[str] = {class_chunk_id}
+            queue: deque[str] = deque(inheritance_graph.get(class_chunk_id, []))
             while queue:
-                parent_class = queue.popleft()
-                if parent_class in visited:
+                parent_chunk_id = queue.popleft()
+                if parent_chunk_id in visited:
                     continue
-                visited.add(parent_class)
-                candidates = symbol_index.get(f"{parent_class}.{rest}", [])
+                visited.add(parent_chunk_id)
+                
+                parent_chunk = chunk_by_id.get(parent_chunk_id)
+                if parent_chunk is None:
+                    continue
+
+                # Look for the method in the exact file where the parent class is defined
+                candidates = file_symbol_index.get(parent_chunk.file_path, {}).get(f"{parent_chunk.name}.{rest}", [])
                 if len(candidates) == 1:
                     return candidates[0]
-                queue.extend(inheritance_graph.get(parent_class, []))
+                queue.extend(inheritance_graph.get(parent_chunk_id, []))
 
     return None
 
@@ -155,7 +169,9 @@ def resolve_chunk_references(
 ) -> None:
     """Mutate chunk.references in place: self/cls -> import bindings -> same-file -> global fallback."""
     for ref in chunk.references:
-        points_to = _resolve_self_reference(ref.text, chunk, symbol_index, inheritance_graph)
+        points_to = _resolve_self_reference(
+            ref.text, chunk, symbol_index, inheritance_graph, file_symbol_index, chunk_by_id
+        )
         if points_to is None:
             points_to = _resolve_import_reference(ref.text, import_bindings, file_symbol_index)
         if points_to is None:
@@ -182,7 +198,7 @@ def resolve_all_chunk_references(all_parsed_chunks: list[ParsedFileChunks]) -> N
 
     for parsed_chunks in all_parsed_chunks:
         for chunk in parsed_chunks.chunks:
-            if chunk.kind not in (ChunkKind.DEFINITION, ChunkKind.CLASS_SKELETON):
+            if chunk.kind not in RESOLVABLE_KINDS:
                 continue
             resolve_chunk_references(
                 chunk, symbol_index, parsed_chunks.import_bindings,
