@@ -15,6 +15,11 @@ def resolve_relative_import(
     """Resolve a relative import like '.db' or '..services' against the file that contains it."""
     dots = len(module_text) - len(module_text.lstrip("."))
     remainder = module_text[dots:]
+    # JS/TS-style relative paths ('./helper', '../lib/thing') leave a leading
+    # '/' here once the dots are stripped off. `Path(base) / "/helper"` would
+    # silently discard `base` and return just "/helper" (pathlib treats a
+    # leading-slash segment as absolute), so it must come off first.
+    remainder = remainder.lstrip("/")
 
     base = Path(file_path).parent
     for _ in range(dots - 1):
