@@ -57,6 +57,19 @@ def _derived_bindings_for_statement(
     return results
 
 
+def _looks_relative(module_text: str) -> bool:
+    """Detect a relative import from its raw text when the grammar doesn't
+    distinguish relative vs. absolute imports via separate captures.
+
+    Python's `from . import x` / `from ..pkg import y` get a dedicated
+    `import.relmodule` capture, so that case is already handled explicitly.
+    JS/TS use the same `string` node type for both `import x from './y'` and
+    `import x from 'some-package'` — the only distinguishing signal is that
+    the text itself starts with a dot.
+    """
+    return module_text.strip("\"'`").startswith(".")
+
+
 def extract_import_bindings_for_file(
     parsed: ParsedFile,
     file_path: str,
@@ -87,7 +100,8 @@ def extract_import_bindings_for_file(
             if relmodule_nodes:
                 module_node, is_relative = relmodule_nodes[0], True
             elif module_nodes:
-                module_node, is_relative = module_nodes[0], False
+                module_node = module_nodes[0]
+                is_relative = _looks_relative(node_text(module_node, parsed.content))
             else:
                 module_node, is_relative = None, False
 

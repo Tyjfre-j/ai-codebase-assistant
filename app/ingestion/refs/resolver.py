@@ -1,3 +1,4 @@
+import os
 from collections import deque
 
 from app.ingestion.code_chunk import ChunkKind, CodeChunk, ImportKind, ParsedFileChunks, RefKind, RefStatus
@@ -34,6 +35,25 @@ def build_file_symbol_index(chunks: list[CodeChunk]) -> dict[str, dict[str, list
         file_index = index.setdefault(chunk.file_path, {})
         _add_to_index(file_index, chunk.name, chunk.chunk_id)
         _add_to_index(file_index, chunk.full_name, chunk.chunk_id)
+    return index
+
+
+def build_dir_symbol_index(chunks: list[CodeChunk]) -> dict[str, dict[str, list[str]]]:
+    """Aggregate resolvable chunks per-directory: dir_path -> name -> chunk_id(s).
+
+    Backs import lookups for languages (e.g. Go) whose import paths resolve to
+    a package directory holding several source files, rather than to one
+    specific file the way Python/JS/TS imports do — see
+    `build_file_symbol_index` for the single-file case this falls back from.
+    """
+    index: dict[str, dict[str, list[str]]] = {}
+    for chunk in chunks:
+        if chunk.kind not in RESOLVABLE_KINDS:
+            continue
+        dir_path = os.path.dirname(chunk.file_path)
+        dir_index = index.setdefault(dir_path, {})
+        _add_to_index(dir_index, chunk.name, chunk.chunk_id)
+        _add_to_index(dir_index, chunk.full_name, chunk.chunk_id)
     return index
 
 
@@ -117,6 +137,7 @@ def _resolve_import_reference(
     text: str,
     import_bindings: dict[str, tuple[str | None, str, str]],
     file_symbol_index: dict[str, dict[str, list[str]]],
+    dir_symbol_index: dict[str, dict[str, list[str]]],
 ) -> str | None:
     root, _, rest = text.partition(".")
     binding = import_bindings.get(root)
@@ -138,6 +159,11 @@ def _resolve_import_reference(
         target_name = bound_name
 
     candidates = file_symbol_index.get(resolved_path, {}).get(target_name, [])
+    if not candidates:
+        # `resolved_path` may be a package directory rather than one specific
+        # file (Go), in which case it won't be a key in file_symbol_index at
+        # all — search across every file in that directory instead.
+        candidates = dir_symbol_index.get(resolved_path, {}).get(target_name, [])
     if len(candidates) == 1:
         return candidates[0]
     return None
@@ -164,6 +190,7 @@ def resolve_chunk_references(
     symbol_index: dict[str, list[str]],
     import_bindings: dict[str, tuple[str | None, str, str]],
     file_symbol_index: dict[str, dict[str, list[str]]],
+    dir_symbol_index: dict[str, dict[str, list[str]]],
     chunk_by_id: dict[str, CodeChunk],
     inheritance_graph: dict[str, list[str]],
 ) -> None:
@@ -173,7 +200,9 @@ def resolve_chunk_references(
             ref.text, chunk, symbol_index, inheritance_graph, file_symbol_index, chunk_by_id
         )
         if points_to is None:
-            points_to = _resolve_import_reference(ref.text, import_bindings, file_symbol_index)
+            points_to = _resolve_import_reference(
+                ref.text, import_bindings, file_symbol_index, dir_symbol_index
+            )
         if points_to is None:
             points_to = _resolve_same_file_reference(ref.text, chunk, file_symbol_index)
         if points_to is None:
@@ -194,6 +223,7 @@ def resolve_all_chunk_references(all_parsed_chunks: list[ParsedFileChunks]) -> N
     chunk_by_id = {chunk.chunk_id: chunk for chunk in all_chunks}
     symbol_index = build_definition_index(all_chunks)
     file_symbol_index = build_file_symbol_index(all_chunks)
+    dir_symbol_index = build_dir_symbol_index(all_chunks)
     inheritance_graph = build_inheritance_graph(all_chunks, chunk_by_id)
 
     for parsed_chunks in all_parsed_chunks:
@@ -202,5 +232,5 @@ def resolve_all_chunk_references(all_parsed_chunks: list[ParsedFileChunks]) -> N
                 continue
             resolve_chunk_references(
                 chunk, symbol_index, parsed_chunks.import_bindings,
-                file_symbol_index, chunk_by_id, inheritance_graph,
+                file_symbol_index, dir_symbol_index, chunk_by_id, inheritance_graph,
             )
