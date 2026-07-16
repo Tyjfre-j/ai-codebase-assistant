@@ -72,7 +72,7 @@ def test_python_class_skeleton_captures_inheritance_reference():
 
     parser = CodeParser()
     parsed = parser.parse_file("sample.py", parser_source.encode("utf-8"))
-    chunks, _, _ = chunk_file("sample.py", parsed)
+    chunks, _, _, _ = chunk_file("sample.py", parsed)
 
     skeleton = next(c for c in chunks if c.kind == "class_skeleton" and c.name == "Child")
     assert [ref.kind for ref in skeleton.references] == ["inheritance"]

@@ -24,7 +24,7 @@ def test_reconstruction_invariant(fixture_path):
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), fixture_path)
     content = open(path, "rb").read()
     parsed = parser.parse_file(path, content)
-    chunks, import_text, import_ranges = chunk_file(path, parsed)
+    chunks, import_text, import_ranges, _ = chunk_file(path, parsed)
     all_ranges = [
         (c.start_byte, c.end_byte) for c in chunks if c.kind != "class_skeleton"
     ] + import_ranges
