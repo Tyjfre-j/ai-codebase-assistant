@@ -151,3 +151,14 @@ def derive_import_bound_name(module_text: str) -> str:
     """
     text = module_text.strip("\"'`")
     return text.rstrip("/").rsplit("/", 1)[-1]
+
+BUILTINS = {
+    "append", "cap", "clear", "close", "complex", "copy", "delete", "imag",
+    "len", "make", "new", "panic", "print", "println", "real", "recover",
+    "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16",
+    "uint32", "uint64", "uintptr", "float32", "float64", "complex64",
+    "complex128", "string", "bool", "byte", "rune", "error"
+}
+
+def is_builtin(name: str) -> bool:
+    return name in BUILTINS

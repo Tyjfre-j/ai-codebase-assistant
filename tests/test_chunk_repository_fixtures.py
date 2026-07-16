@@ -13,8 +13,8 @@ FIXTURES_ROOT = "tests/fixtures"
 ])
 def test_chunk_repository_produces_definition_chunks(language, expected_ext):
     results = chunk_repository(f"{FIXTURES_ROOT}/{language}")
-    assert len(results) == 1, f"expected exactly one file parsed for {language}"
-    parsed_chunks = results[0]
+    assert len(results.files) == 1, f"expected exactly one file parsed for {language}"
+    parsed_chunks = results.files[0]
     assert parsed_chunks.file_path.endswith(expected_ext)
     definition_chunks = [c for c in parsed_chunks.chunks if c.kind == "definition"]
     assert len(definition_chunks) > 0, f"expected at least one definition chunk for {language}"
@@ -22,7 +22,7 @@ def test_chunk_repository_produces_definition_chunks(language, expected_ext):
 
 def test_python_fixture_has_expected_symbols():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results[0]
+    parsed_chunks = results.files[0]
 
     all_symbol_names = {c.name for c in parsed_chunks.chunks}
     definition_symbol_names = {c.name for c in parsed_chunks.chunks if c.kind == "definition"}
@@ -40,17 +40,17 @@ def test_python_fixture_has_expected_symbols():
 
 def test_python_fixture_refs_have_ref_kind_set():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results[0]
+    parsed_chunks = results.files[0]
     all_refs = [ref for c in parsed_chunks.chunks for ref in c.references]
     assert len(all_refs) > 0
     for ref in all_refs:
         assert ref.kind in ("call", "inheritance")
-        assert ref.status == "unresolved"
+        assert ref.status in ("unresolved", "builtin", "external")
 
 
 def test_python_fixture_standalone_helper_calls_os_path_exists():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results[0]
+    parsed_chunks = results.files[0]
     helper_chunk = next(
         c for c in parsed_chunks.chunks
         if c.kind == "definition" and c.name == "standalone_helper"

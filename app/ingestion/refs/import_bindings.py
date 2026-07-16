@@ -88,6 +88,7 @@ def extract_import_bindings_for_file(
     resolves_to_directory = getattr(language_helpers, "RESOLVES_IMPORT_TO_DIRECTORY", False)
     path_uses_dots = getattr(language_helpers, "PATH_USES_DOTS", True)
     derive_bound_name = getattr(language_helpers, "derive_import_bound_name", None)
+    allows_submodule_imports = getattr(language_helpers, "ALLOWS_SUBMODULE_IMPORTS", False)
     bindings: dict[str, tuple[str | None, str, str]] = {}
 
     for statement in captures.get("import.stmt", []):
@@ -110,7 +111,38 @@ def extract_import_bindings_for_file(
             )
 
             for bound_name, alias in statement_bindings.items():
-                if shared_module_text is not None:
+                resolved: str | None
+                import_kind: str
+                if shared_module_text is not None and allows_submodule_imports:
+                    # "from X import Y" shape, for a language whose package
+                    # system makes this genuinely ambiguous (Python): Y is
+                    # EITHER a symbol defined directly in X's own file (e.g.
+                    # `from app.models import User`), OR Y is itself a
+                    # submodule/subpackage of X (e.g. `from app.db.generated
+                    # import session_queries`, where session_queries is its
+                    # own file). Try the more specific submodule path first
+                    # and fall back to "symbol inside X" if that file doesn't
+                    # exist. Languages without this ambiguity (JS/TS's ES
+                    # modules, Go) skip this branch entirely via the
+                    # `allows_submodule_imports` flag below — appending a bare
+                    # symbol name onto their module paths doesn't correspond
+                    # to anything in their import semantics and could produce
+                    # a wrong match if a coincidentally-named file exists.
+                    submodule_text = f"{shared_module_text}.{bound_name}"
+                    submodule_path = resolve_import_path(
+                        submodule_text, is_relative, file_path, project_root,
+                        file_extension, index_filename,
+                    )
+                    if submodule_path is not None:
+                        resolved = submodule_path
+                        import_kind = ImportKind.MODULE
+                    else:
+                        resolved = resolve_import_path(
+                            shared_module_text, is_relative, file_path, project_root,
+                            file_extension, index_filename,
+                        )
+                        import_kind = ImportKind.NAMED
+                elif shared_module_text is not None:
                     # "from X import Y" shape: a module was named separately from what's bound,
                     # so `bound_name` is a specific symbol pulled out of that module.
                     resolved = resolve_import_path(

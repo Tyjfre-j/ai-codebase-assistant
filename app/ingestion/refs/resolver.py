@@ -185,6 +185,18 @@ def _resolve_global_reference(text: str, symbol_index: dict[str, list[str]]) -> 
     return None
 
 
+def _is_external_import(
+    text: str,
+    import_bindings: dict[str, tuple[str | None, str, str]],
+) -> bool:
+    root, _, _ = text.partition(".")
+    binding = import_bindings.get(root)
+    if binding is not None:
+        resolved_path, _, _ = binding
+        return resolved_path is None
+    return False
+
+
 def resolve_chunk_references(
     chunk: CodeChunk,
     symbol_index: dict[str, list[str]],
@@ -195,6 +207,10 @@ def resolve_chunk_references(
     inheritance_graph: dict[str, list[str]],
 ) -> None:
     """Mutate chunk.references in place: self/cls -> import bindings -> same-file -> global fallback."""
+    from app.ingestion.languages import LANG_HELPERS
+    language_helpers = LANG_HELPERS.get(chunk.language)
+    is_builtin = getattr(language_helpers, "is_builtin", lambda name: False) if language_helpers else lambda name: False
+
     for ref in chunk.references:
         points_to = _resolve_self_reference(
             ref.text, chunk, symbol_index, inheritance_graph, file_symbol_index, chunk_by_id
@@ -214,7 +230,16 @@ def resolve_chunk_references(
                 points_to = None
 
         ref.points_to = points_to
-        ref.status = RefStatus.LOCAL if points_to is not None else RefStatus.UNRESOLVED
+        if points_to is not None:
+            ref.status = RefStatus.LOCAL
+        else:
+            root, _, _ = ref.text.partition(".")
+            if _is_external_import(ref.text, import_bindings):
+                ref.status = RefStatus.EXTERNAL
+            elif is_builtin(root):
+                ref.status = RefStatus.BUILTIN
+            else:
+                ref.status = RefStatus.UNRESOLVED
 
 
 def resolve_all_chunk_references(all_parsed_chunks: list[ParsedFileChunks]) -> None:

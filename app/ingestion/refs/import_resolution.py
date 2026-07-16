@@ -3,6 +3,27 @@
 from pathlib import Path
 
 
+def _read_declared_module_path(project_root: str) -> str | None:
+    """Read the module path declared by a go.mod at project_root, if present.
+
+    Go import paths always begin with the declaring module's own path (e.g.
+    "myrepo/pkg/utils", where "myrepo" comes from `module myrepo` in go.mod) —
+    that prefix is not an actual directory on disk and must be stripped before
+    joining with project_root, since project_root is wherever the repo happens
+    to live, not necessarily a directory named after the module.
+    """
+    go_mod = Path(project_root) / "go.mod"
+    try:
+        text = go_mod.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("module "):
+            return line[len("module "):].strip()
+    return None
+
+
 def resolve_relative_import(
     module_text: str,
     file_path: str,
@@ -56,13 +77,31 @@ def resolve_absolute_import(
     path_uses_dots: bool = True,
 ) -> str | None:
     """Resolve an absolute import like 'myapp.services' against the project root."""
+    if resolves_to_directory:
+        # Package-path style imports (Go): the import path is prefixed by this
+        # repo's own declared module path, which isn't a real directory on
+        # disk — strip it (via go.mod) before joining with project_root.
+        # Without go.mod (or if the import doesn't match this repo's module),
+        # there's nothing safe to guess, so this reports "can't resolve"
+        # rather than trying a heuristic that could false-positive.
+        declared_module = _read_declared_module_path(project_root)
+        if declared_module is None:
+            return None
+        if module_text == declared_module:
+            remainder = ""
+        elif module_text.startswith(declared_module + "/"):
+            remainder = module_text[len(declared_module) + 1:]
+        else:
+            # Doesn't match this repo's own module — an external/third-party
+            # package path, not something with a local file to point to.
+            return None
+        base = Path(project_root) / remainder if remainder else Path(project_root)
+        return str(base) if base.is_dir() else None
+
     if path_uses_dots:
         base = Path(project_root) / module_text.replace(".", "/")
     else:
         base = Path(project_root) / module_text
-
-    if resolves_to_directory:
-        return str(base) if base.is_dir() else None
 
     as_module = base.with_suffix(file_extension)
     if as_module.exists():

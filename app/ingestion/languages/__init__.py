@@ -23,6 +23,7 @@ REQUIRED_ATTRS = (
     "get_definition_name",
     "get_enclosing_class_name",
     "get_module_index_filename",
+    "is_builtin",
 )
 
 for _language_name, _language_module in LANG_HELPERS.items():

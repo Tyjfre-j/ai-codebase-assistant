@@ -163,3 +163,27 @@ def get_class_skeleton_footer() -> str | None:
 
 def get_module_index_filename() -> str | None:
     return "__init__.py"
+
+
+# Python's package system makes "from X import Y" genuinely ambiguous between
+# "Y is a symbol in X's own __init__.py" and "Y is X's submodule, its own
+# file/subpackage" — both are idiomatic and common (the latter especially with
+# generated code, e.g. sqlc). JS/TS's ES modules and Go's package imports have
+# no equivalent ambiguity: a named import always refers to something exported
+# by the exact file/path given, never to a differently-named nested file.
+ALLOWS_SUBMODULE_IMPORTS = True
+
+BUILTINS = {
+    "abs", "all", "any", "ascii", "bin", "bool", "bytearray", "bytes", "callable", "chr",
+    "classmethod", "compile", "complex", "delattr", "dict", "dir", "divmod", "enumerate",
+    "eval", "exec", "filter", "float", "format", "frozenset", "getattr", "globals",
+    "hasattr", "hash", "help", "hex", "id", "input", "int", "isinstance", "issubclass",
+    "iter", "len", "list", "locals", "map", "max", "memoryview", "min", "next", "object",
+    "oct", "open", "ord", "pow", "print", "property", "range", "repr", "reversed", "round",
+    "set", "setattr", "slice", "sorted", "staticmethod", "str", "sum", "super", "tuple",
+    "type", "vars", "zip", "__import__", "Exception", "ValueError", "TypeError",
+    "RuntimeError", "KeyError", "IndexError", "AttributeError", "ImportError"
+}
+
+def is_builtin(name: str) -> bool:
+    return name in BUILTINS
