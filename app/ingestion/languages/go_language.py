@@ -1,3 +1,8 @@
+import tree_sitter_go as _ts_go
+from tree_sitter import Language
+
+from app.ingestion.source_text import node_text
+
 QUERY = """
 (function_declaration
   name: (identifier) @func.name
@@ -40,23 +45,65 @@ QUERY = """
   )
 ) @import.stmt
 """
-REF_QUERY = ""
+REF_QUERY = """
+(call_expression
+  function: (identifier) @reference.call
+)
+
+(call_expression
+  function: (selector_expression
+    operand: (_) @reference.call.object
+    field: (field_identifier) @reference.call.attr
+  )
+)
+
+(field_declaration
+  type: (type_identifier) @reference.base_class
+  !name
+)
+"""
 
 CLASS_NODE_TYPES: set[str] = set()
-STRUCT_NODE_TYPES = {"type_declaration"}     # only when type_spec.type == struct_type
-INTERFACE_NODE_TYPES = {"type_declaration"}  # only when type_spec.type == interface_type
-WRAPPER_TYPES = {"function_declaration", "method_declaration"}
+FILE_EXTENSION = ".go"
 
+# Go import paths are already slash-separated (e.g. "os/exec"), unlike
+# Python's dotted module names, and can legitimately contain literal dots in
+# a path segment (e.g. "gopkg.in/yaml.v2") — those must not be turned into
+# extra path separators.
+PATH_USES_DOTS = False
+
+# A Go import path resolves to a *package directory* containing many .go
+# files, never to one file named after the import path.
+RESOLVES_IMPORT_TO_DIRECTORY = True
+
+
+def get_language() -> Language:
+    return Language(_ts_go.language())
 
 def unwrap_decorated_definition_node(def_node):
     """Return Go definitions as-is because Go has no decorator wrapper."""
     return def_node  # no decorator-equivalent wrapper in Go
 
 
+def get_definition_name(node, content: bytes) -> str:
+    """Pull the identifier name out of a function/method/type declaration node."""
+    name_node = node.child_by_field_name("name")
+    if name_node is None and node.type == "type_declaration":
+        # class.def/interface.def capture the outer type_declaration, but its
+        # name lives on the nested type_spec (struct/interface), not directly
+        # on type_declaration itself.
+        type_spec = next(
+            (child for child in node.children if child.type == "type_spec"), None
+        )
+        if type_spec is not None:
+            name_node = type_spec.child_by_field_name("name")
+    if name_node is None:
+        return "<anonymous>"
+    return node_text(name_node, content)
+
+
 def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
     """Return the receiver type name for Go methods."""
-    from app.ingestion.source_text import node_text
-
     if def_node.type != "method_declaration":
         return None
 
@@ -88,3 +135,19 @@ def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | 
 def get_class_member_stub_info(node, content: bytes):
     """Return no class member stubs because Go methods are not tree-nested."""
     return None
+
+def get_module_index_filename() -> str | None:
+    return None
+
+
+def derive_import_bound_name(module_text: str) -> str:
+    """Derive the identifier a Go import is referenced by at call sites.
+
+    Go's `import "encoding/json"` has no explicit bound-name node in the
+    grammar for the unaliased case — the identifier used in code (`json.Marshal`)
+    is implicit: the last segment of the import path. An explicit local name
+    (`import j "encoding/json"`) is still captured separately as `import.alias`
+    and takes precedence over this.
+    """
+    text = module_text.strip("\"'`")
+    return text.rstrip("/").rsplit("/", 1)[-1]

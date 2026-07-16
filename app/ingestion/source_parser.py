@@ -1,11 +1,6 @@
-
 from dataclasses import dataclass
 from pathlib import Path
 
-import tree_sitter_go as tsgo
-import tree_sitter_javascript as tsjs
-import tree_sitter_python as tspython
-import tree_sitter_typescript as tsts
 from tree_sitter import Language, Parser, Query, Tree
 
 from app.core.exceptions import (
@@ -38,23 +33,18 @@ class ParsedFile:
 
 def load_languages() -> dict[str, LanguageConfig]:
     """Load all supported tree-sitter grammars and compile their queries."""
-    specs = [
-        # (extension, name, loader_function, query_string, ref_query_string)
-        (".py", "python", tspython.language, LANG_HELPERS["python"].QUERY, LANG_HELPERS["python"].REF_QUERY),
-        (".go", "go", tsgo.language, LANG_HELPERS["go"].QUERY, LANG_HELPERS["go"].REF_QUERY),
-        (".ts", "typescript", tsts.language_typescript, LANG_HELPERS["typescript"].QUERY, LANG_HELPERS["typescript"].REF_QUERY),
-        (".js", "javascript", tsjs.language, LANG_HELPERS["javascript"].QUERY, LANG_HELPERS["javascript"].REF_QUERY),
-    ]
     configs: dict[str, LanguageConfig] = {}
-    for ext, name, loader_fn, query_str, ref_query_str in specs:
+    for name, module in LANG_HELPERS.items():
         try:
-            lang = Language(loader_fn())
+            lang = module.get_language()
             parser = Parser(lang)
-            query = Query(lang, query_str)
-            ref_query = Query(lang, ref_query_str)
+            query = Query(lang, module.QUERY)
+            ref_query = Query(lang, module.REF_QUERY)
         except Exception as e:
-            raise LanguageLoadError(f"Failed to load language for extension {ext}: {e}") from e
-        configs[ext] = LanguageConfig(name=name, language=lang, parser=parser, query=query, ref_query=ref_query)
+            raise LanguageLoadError(f"Failed to load language {name!r}: {e}") from e
+        configs[module.FILE_EXTENSION] = LanguageConfig(
+            name=name, language=lang, parser=parser, query=query, ref_query=ref_query
+        )
     return configs
 
 

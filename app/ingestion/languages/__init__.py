@@ -14,7 +14,16 @@ LANG_HELPERS = {
     "typescript": typescript_language,
 }
 
-REQUIRED_ATTRS = ("QUERY", "unwrap_decorated_definition_node", "get_enclosing_class_name")
+REQUIRED_ATTRS = (
+    "FILE_EXTENSION",
+    "get_language",
+    "QUERY",
+    "REF_QUERY",
+    "unwrap_decorated_definition_node",
+    "get_definition_name",
+    "get_enclosing_class_name",
+    "get_module_index_filename",
+)
 
 for _language_name, _language_module in LANG_HELPERS.items():
     _missing_attrs = [
