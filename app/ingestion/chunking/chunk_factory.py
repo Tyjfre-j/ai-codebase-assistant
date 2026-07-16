@@ -13,6 +13,7 @@ def build_definition_chunk(
     file_path: str,
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
+    parent_chunk_id: str | None = None,
 ) -> CodeChunk:
     """Build a CodeChunk for a captured definition node."""
     language_helpers = LANG_HELPERS[parsed.language]
@@ -50,11 +51,15 @@ def build_definition_chunk(
         merged_names=None,
         size_chars=len(code),
         references=references,
+        parent_chunk_id=parent_chunk_id,
     )
 
 
 def build_leftover_code_chunk(
-    segments: list[list[Node]], file_path: str, parsed: ParsedFile
+    segments: list[list[Node]],
+    file_path: str,
+    parsed: ParsedFile,
+    parent_chunk_id: str | None = None,
 ) -> CodeChunk:
     """Build a CodeChunk from one or more contiguous non-definition node segments.
 
@@ -87,6 +92,7 @@ def build_leftover_code_chunk(
         kind=ChunkKind.LEFTOVER,
         merged_names=None,
         size_chars=len(code),
+        parent_chunk_id=parent_chunk_id,
     )
 
 
@@ -94,6 +100,7 @@ def build_class_skeleton_chunk(
     class_node: Node,
     file_path: str,
     parsed: ParsedFile,
+    parent_chunk_id: str | None = None,
 ) -> CodeChunk:
     """Build a compact class chunk that lists member signatures."""
     name_node = class_node.child_by_field_name("name")
@@ -160,6 +167,7 @@ def build_class_skeleton_chunk(
         merged_names=None,
         size_chars=len(code),
         references=references,
+        parent_chunk_id=parent_chunk_id,
     )
 
 
@@ -168,6 +176,7 @@ def build_function_skeleton_chunk(
     file_path: str,
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
+    parent_chunk_id: str | None = None,
 ) -> CodeChunk:
     """Build a compact function chunk that just lists its signature."""
     language_helpers = LANG_HELPERS[parsed.language]
@@ -208,4 +217,5 @@ def build_function_skeleton_chunk(
         kind=ChunkKind.FUNCTION_SKELETON,
         merged_names=None,
         size_chars=len(code),
+        parent_chunk_id=parent_chunk_id,
     )
