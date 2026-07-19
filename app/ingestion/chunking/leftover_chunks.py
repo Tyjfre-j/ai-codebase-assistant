@@ -15,16 +15,7 @@ def group_leftovers(
     budget: int,
     node_id_to_chunk_id: dict[int, str] | None = None,
 ) -> tuple[list[CodeChunk], str, list[tuple[int, int]]]:
-    """Split leftover nodes into import metadata and budgeted chunks.
-
-    `leftover_groups` now pairs each group of nodes with the enclosing
-    definition node it was found inside (None at top level), so the
-    resulting leftover chunks can be linked back to their parent
-    CLASS_SKELETON/FUNCTION_SKELETON chunk via `node_id_to_chunk_id` --
-    a lookup of already-built chunk_ids, populated by the caller
-    (`chunk_pipeline.chunk_file`) as it builds chunks in document order,
-    which guarantees the parent is built before any of its children.
-    """
+    """Split leftover nodes into import metadata and budgeted chunks."""
     import_ids = {node.id for node in captures.get(IMPORT_CAPTURE, [])}
     node_id_to_chunk_id = node_id_to_chunk_id or {}
 
