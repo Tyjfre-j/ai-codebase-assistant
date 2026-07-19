@@ -61,7 +61,7 @@ def chunk_file(
         if candidate_kind == ChunkKind.DEFINITION:
             for node in nodes:
                 chunk = build_definition_chunk(
-                    node, file_path, parsed, captures, definition_ids, parent_chunk_id
+                    node, file_path, parsed, captures, parent_chunk_id
                 )
                 definition_chunks.append(chunk)
                 node_id_to_chunk_id[node.id] = chunk.chunk_id

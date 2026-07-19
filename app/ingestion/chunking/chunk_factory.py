@@ -13,7 +13,6 @@ def build_definition_chunk(
     file_path: str,
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
-    definition_ids: set[int],
     parent_chunk_id: str | None = None,
 ) -> CodeChunk:
     """Build a CodeChunk for a captured definition node."""
@@ -32,7 +31,7 @@ def build_definition_chunk(
         full_name = name
 
     code = node_text(node, parsed.content)
-    references = extract_reference_records(node, parsed.content, parsed.ref_query, definition_ids)
+    references = extract_reference_records(node, parsed.content, parsed.ref_query)
 
     return CodeChunk(
         chunk_id=stable_chunk_id(file_path, node.start_byte, full_name),
