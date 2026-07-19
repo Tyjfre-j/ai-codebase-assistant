@@ -9,6 +9,7 @@ class ChunkKind:
     FUNCTION_SKELETON = "function_skeleton" # A synthetic chunk representing a function's skeleton, with no code of its own.
     LEFTOVER = "leftover" # Code that doesn't fit into any other category.
     MERGED_GROUP = "merged_group" # A group of chunks that have been merged together.
+    FILE_OVERVIEW = "file_overview" # A synthetic chunk representing the entire file, with no code of its own.
 
 class RefKind:
     """The values RefRecord.kind can take."""
