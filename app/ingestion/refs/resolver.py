@@ -9,10 +9,10 @@ def _add_to_index(index: dict[str, list[str]], name: str, chunk_id: str) -> None
     if chunk_id not in bucket:
         bucket.append(chunk_id)
 
-RESOLVABLE_KINDS = (ChunkKind.DEFINITION, ChunkKind.CLASS_SKELETON, ChunkKind.FUNCTION_SKELETON)
+RESOLVABLE_KINDS = (ChunkKind.DEFINITION, ChunkKind.MERGED_GROUP, ChunkKind.CLASS_SKELETON, ChunkKind.FUNCTION_SKELETON)
 
 def build_definition_index(chunks: list[CodeChunk]) -> dict[str, list[str]]:
-    """Aggregate definition/class-chunk names into a name -> chunk_id(s) index."""
+    """Aggregate definition/class/function-chunk names into a name -> chunk_id(s) index."""
     index: dict[str, list[str]] = {}
     for chunk in chunks:
         if chunk.kind not in RESOLVABLE_KINDS:
@@ -23,11 +23,7 @@ def build_definition_index(chunks: list[CodeChunk]) -> dict[str, list[str]]:
 
 
 def build_file_symbol_index(chunks: list[CodeChunk]) -> dict[str, dict[str, list[str]]]:
-    """Aggregate resolvable chunks per-file: file_path -> name -> chunk_id(s).
-
-    Backs both same-file and import-target lookups, replacing what used to be a
-    linear `[c for c in all_chunks if c.file_path == ... ]` scan per reference.
-    """
+    """Aggregate resolvable chunks per-file: file_path -> name -> chunk_id(s)."""
     index: dict[str, dict[str, list[str]]] = {}
     for chunk in chunks:
         if chunk.kind not in RESOLVABLE_KINDS:
@@ -39,13 +35,7 @@ def build_file_symbol_index(chunks: list[CodeChunk]) -> dict[str, dict[str, list
 
 
 def build_dir_symbol_index(chunks: list[CodeChunk]) -> dict[str, dict[str, list[str]]]:
-    """Aggregate resolvable chunks per-directory: dir_path -> name -> chunk_id(s).
-
-    Backs import lookups for languages (e.g. Go) whose import paths resolve to
-    a package directory holding several source files, rather than to one
-    specific file the way Python/JS/TS imports do — see
-    `build_file_symbol_index` for the single-file case this falls back from.
-    """
+    """Aggregate resolvable chunks per-directory: dir_path -> name -> chunk_id(s)."""
     index: dict[str, dict[str, list[str]]] = {}
     for chunk in chunks:
         if chunk.kind not in RESOLVABLE_KINDS:
@@ -61,12 +51,7 @@ def build_inheritance_graph(
     all_chunks: list[CodeChunk],
     chunk_by_id: dict[str, CodeChunk],
 ) -> dict[str, list[str]]:
-    """Build class_chunk_id -> [parent_chunk_id, ...] from resolved inheritance refs.
-
-    Uses the already-extracted INHERITANCE references on CLASS_SKELETON chunks.
-    Each resolved ref's ``points_to`` is a chunk_id; we use that directly to build
-    the graph.
-    """
+    """Build class_chunk_id -> [parent_chunk_id, ...] from resolved inheritance refs."""
     graph: dict[str, list[str]] = {}
     for chunk in all_chunks:
         if chunk.kind != ChunkKind.CLASS_SKELETON:
@@ -88,30 +73,22 @@ def _resolve_self_reference(
     file_symbol_index: dict[str, dict[str, list[str]]],
     chunk_by_id: dict[str, CodeChunk],
 ) -> str | None:
-    """Resolve self./cls./this. references, walking the inheritance chain if needed.
-
-    For ``self.foo()`` in class ``Child``, this first checks ``Child.foo``.
-    If not found and ``Child`` inherits from ``Base``, it checks ``Base.foo``,
-    and so on up the MRO-like chain (BFS, with cycle protection) using exact chunk IDs.
-    """
+    """Resolve self./cls./this. references, walking the inheritance chain if needed."""
     for prefix in ("self.", "cls.", "this."):
         if text.startswith(prefix) and chunk.defined_in_class:
             rest = text[len(prefix):]
 
-            # Try current class first. Prefer same-file resolution to avoid ambiguity.
             candidates = file_symbol_index.get(chunk.file_path, {}).get(f"{chunk.defined_in_class}.{rest}", [])
             if len(candidates) != 1:
                 candidates = symbol_index.get(f"{chunk.defined_in_class}.{rest}", [])
             if len(candidates) == 1:
                 return candidates[0]
 
-            # Find the exact chunk_id for the current class
             class_candidates = file_symbol_index.get(chunk.file_path, {}).get(chunk.defined_in_class, [])
             if len(class_candidates) != 1:
                 continue
             class_chunk_id = class_candidates[0]
 
-            # Walk the inheritance chain (BFS) using chunk IDs.
             visited: set[str] = {class_chunk_id}
             queue: deque[str] = deque(inheritance_graph.get(class_chunk_id, []))
             while queue:
@@ -124,7 +101,6 @@ def _resolve_self_reference(
                 if parent_chunk is None:
                     continue
 
-                # Look for the method in the exact file where the parent class is defined
                 candidates = file_symbol_index.get(parent_chunk.file_path, {}).get(f"{parent_chunk.name}.{rest}", [])
                 if len(candidates) == 1:
                     return candidates[0]
@@ -149,20 +125,12 @@ def _resolve_import_reference(
         return None
 
     if import_kind == ImportKind.MODULE:
-        # `root` is the module itself; the actual symbol being referenced is
-        # whatever follows it, e.g. `os.path.join` -> "path.join" inside "os".
         target_name = rest if rest else bound_name
     else:
-        # `root` already IS the specific imported symbol (a "from X import Y"
-        # binding); anything after "." is an attribute/method access on it,
-        # not a separate top-level chunk to look up.
         target_name = bound_name
 
     candidates = file_symbol_index.get(resolved_path, {}).get(target_name, [])
     if not candidates:
-        # `resolved_path` may be a package directory rather than one specific
-        # file (Go), in which case it won't be a key in file_symbol_index at
-        # all — search across every file in that directory instead.
         candidates = dir_symbol_index.get(resolved_path, {}).get(target_name, [])
     if len(candidates) == 1:
         return candidates[0]
@@ -206,24 +174,32 @@ def resolve_chunk_references(
     chunk_by_id: dict[str, CodeChunk],
     inheritance_graph: dict[str, list[str]],
 ) -> None:
-    """Mutate chunk.references in place: self/cls -> import bindings -> same-file -> global fallback."""
+    """Mutate chunk.references in place: self/cls -> same-file -> import -> global fallback."""
     from app.ingestion.languages import LANG_HELPERS
     language_helpers = LANG_HELPERS.get(chunk.language)
     is_builtin = getattr(language_helpers, "is_builtin", lambda name: False) if language_helpers else lambda name: False
 
     for ref in chunk.references:
+        # 1. self./cls./this. references (most specific)
         points_to = _resolve_self_reference(
             ref.text, chunk, symbol_index, inheritance_graph, file_symbol_index, chunk_by_id
         )
+        
+        # 2. Same-file definitions (local shadows import)
+        if points_to is None:
+            points_to = _resolve_same_file_reference(ref.text, chunk, file_symbol_index)
+        
+        # 3. Import bindings
         if points_to is None:
             points_to = _resolve_import_reference(
                 ref.text, import_bindings, file_symbol_index, dir_symbol_index
             )
-        if points_to is None:
-            points_to = _resolve_same_file_reference(ref.text, chunk, file_symbol_index)
+        
+        # 4. Global fallback (any file in repo)
         if points_to is None:
             points_to = _resolve_global_reference(ref.text, symbol_index)
 
+        # Language boundary check
         if points_to is not None:
             target_chunk = chunk_by_id.get(points_to)
             if target_chunk is not None and target_chunk.language != chunk.language:
