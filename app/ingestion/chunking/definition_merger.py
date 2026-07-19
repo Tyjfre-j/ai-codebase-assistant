@@ -3,37 +3,56 @@ from dataclasses import replace
 from app.ingestion.code_chunk import ChunkKind, CodeChunk
 from app.ingestion.source_text import stable_chunk_id
 
-MAX_GAP_BYTES = 2  # allowance for a blank line between mergeable siblings
+MERGEABLE_KINDS = {ChunkKind.DEFINITION, ChunkKind.MERGED_GROUP}
 
 
 def merge_adjacent_defs(chunks: list[CodeChunk], budget: int) -> list[CodeChunk]:
-    """Merge adjacent definition chunks while respecting the size budget."""
+    """Merge adjacent, same-scope definition chunks while respecting the size budget.
+    
+    Skeleton chunks pass through untouched. Only DEFINITION and MERGED_GROUP
+    chunks are candidates. Chunks must share the same parent_chunk_id to merge.
+    """
     merged: list[CodeChunk] = []
     buffer: CodeChunk | None = None
 
     for chunk in chunks:
-        if chunk.kind == ChunkKind.CLASS_SKELETON:
+        # Skeletons pass through untouched — never merged
+        if chunk.kind in (ChunkKind.CLASS_SKELETON, ChunkKind.FUNCTION_SKELETON):
             if buffer is not None:
                 merged.append(buffer)
                 buffer = None
-            merged.append(chunk)  # skeletons pass through untouched, never merged
+            merged.append(chunk)
             continue
+
+        # Only mergeable kinds participate
+        if chunk.kind not in MERGEABLE_KINDS:
+            if buffer is not None:
+                merged.append(buffer)
+                buffer = None
+            merged.append(chunk)
+            continue
+
         if buffer is None:
             buffer = chunk
             continue
-        is_contiguous = chunk.start_byte - buffer.end_byte <= MAX_GAP_BYTES
-        if is_contiguous and (buffer.size_chars + chunk.size_chars) <= budget:
+
+        # Same scope (same parent) and fits budget → merge
+        same_scope = buffer.parent_chunk_id == chunk.parent_chunk_id
+        fits_budget = (buffer.size_chars + chunk.size_chars) <= budget
+
+        if same_scope and fits_budget:
             buffer = combine_chunks(buffer, chunk)
         else:
             merged.append(buffer)
             buffer = chunk
+
     if buffer is not None:
         merged.append(buffer)
     return merged
 
 
 def combine_chunks(first: CodeChunk, second: CodeChunk) -> CodeChunk:
-    """Return a single chunk with metadata from two adjacent definitions."""
+    """Return a single chunk with metadata from two adjacent, same-scope definitions."""
     merged_names = (
         first.merged_names or [first.name]
     ) + (
