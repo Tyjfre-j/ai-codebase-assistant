@@ -1,25 +1,39 @@
 # Step 9 — Extracting Raw References
 
 **Module:** `app/ingestion/refs/extractor.py`
-**Entry point:** `extract_reference_records(node, content, ref_query) -> list[RefRecord]`
+**Entry point:** `extract_reference_records(node, content, ref_query, definition_ids=None) -> list[RefRecord]`
 
 ## Purpose
-Given one chunk's own AST subtree, find every call and inheritance
-reference inside it and produce **unresolved** `RefRecord`s (text only —
-`points_to` stays `None` until Step 11).
+Given one chunk's own AST subtree, find every call and inheritance reference and produce **unresolved** `RefRecord`s (`points_to = None` until Step 11).
 
 ## What it captures (via the language's `REF_QUERY`)
-- **Bare calls** — `reference.call` (e.g. `get_user()` → text `"get_user"`).
-- **Attribute/method calls** — paired `reference.call.object` +
-  `reference.call.attr` captures. These are matched up by their *shared
-  parent node* (both captures' parent must be the same call/member-access
-  node, keyed by `(start_byte, end_byte)`), then rendered as
-  `"{object_text}.{attr_text}"` (e.g. `"self.get_user"`).
-- **Base classes** — `reference.base_class` (e.g. `Base` in
-  `class Child(Base):`), recorded with `RefKind.INHERITANCE`.
+
+### Bare calls — `reference.call`
+```python
+get_user()  # → text "get_user"
+```
+
+### Attribute/method calls — paired `reference.call.object` + `reference.call.attr`
+Matched by shared parent node (keyed by `(start_byte, end_byte)`):
+```python
+self.get_user()  # → text "self.get_user"
+obj.helper()     # → text "obj.helper"
+```
+
+### Base classes — `reference.base_class`
+```python
+class Child(Base):  # → text "Base", kind=INHERITANCE
+```
+
+## Owner name resolution (`definition_ids`)
+When `definition_ids` is provided, `_find_owner` walks up from the call node to find which direct definition (function/method) contains it. This populates `RefRecord.owner_name` — useful for whole-class/function chunks to know which inner method owns a reference.
 
 ## Output
-`list[RefRecord]`, each with `text`, `kind` (`CALL` or `INHERITANCE`),
-`points_to=None`, and `status=RefStatus.UNRESOLVED` (the dataclass default).
-This is attached to `CodeChunk.references` at construction time in Step 6;
-resolution against the rest of the repository happens later in Step 11.
+`list[RefRecord]`, each with:
+- `text` — as written at call site
+- `kind` — `CALL` or `INHERITANCE`
+- `points_to` — `None` (resolved in Step 11)
+- `status` — `UNRESOLVED` (default)
+- `owner_name` — containing method name (if `definition_ids` provided)
+
+Attached to `CodeChunk.references` at construction time in Step 6.
