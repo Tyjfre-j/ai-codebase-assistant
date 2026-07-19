@@ -25,15 +25,11 @@ obj.helper()     # → text "obj.helper"
 class Child(Base):  # → text "Base", kind=INHERITANCE
 ```
 
-## Owner name resolution (`definition_ids`)
-When `definition_ids` is provided, `_find_owner` walks up from the call node to find which direct definition (function/method) contains it. This populates `RefRecord.owner_name` — useful for whole-class/function chunks to know which inner method owns a reference.
-
 ## Output
 `list[RefRecord]`, each with:
 - `text` — as written at call site
 - `kind` — `CALL` or `INHERITANCE`
 - `points_to` — `None` (resolved in Step 11)
 - `status` — `UNRESOLVED` (default)
-- `owner_name` — containing method name (if `definition_ids` provided)
 
 Attached to `CodeChunk.references` at construction time in Step 6.

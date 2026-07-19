@@ -59,11 +59,12 @@ def build_inheritance_graph(
         parents: list[str] = []
         for ref in chunk.references:
             if ref.kind == RefKind.INHERITANCE and ref.points_to is not None:
-                parents.append(ref.points_to)
+                # Only include parents that actually exist in the chunk index
+                if ref.points_to in chunk_by_id:
+                    parents.append(ref.points_to)
         if parents:
             graph[chunk.chunk_id] = parents
     return graph
-
 
 def _resolve_self_reference(
     text: str,
