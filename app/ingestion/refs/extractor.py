@@ -3,11 +3,11 @@ from tree_sitter import Node, Query, QueryCursor
 from app.ingestion.code_chunk import RefKind, RefRecord
 from app.ingestion.source_text import node_text
 
+
 def extract_reference_records(
     node: Node,
     content: bytes,
     ref_query: Query,
-    definition_ids: set[int] | None = None,
 ) -> list[RefRecord]:
     """Extract raw (unresolved) call/inheritance references from one chunk's node."""
     cursor = QueryCursor(ref_query)
