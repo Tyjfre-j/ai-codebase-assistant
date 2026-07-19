@@ -32,7 +32,6 @@ One call or inheritance reference found inside a chunk:
 - `kind: str` — `RefKind.CALL` or `RefKind.INHERITANCE`.
 - `points_to: str | None` — The `chunk_id` this reference resolves to, once known.
 - `status: str` — `RefStatus.LOCAL`, `EXTERNAL`, `BUILTIN`, or `UNRESOLVED`.
-- `owner_name: str | None` — For references inside whole-class/function chunks, which inner method owns this reference.
 
 ## `CodeChunk`
 The central retrievable unit:

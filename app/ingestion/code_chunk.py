@@ -39,7 +39,6 @@ class RefRecord:
     kind: str  # RefKind.CALL (this invokes something) or RefKind.INHERITANCE (this extends something).
     points_to: str | None  # The chunk_id this reference resolves to, once we know it; None until then.
     status: str = RefStatus.UNRESOLVED  # RefStatus.LOCAL, RefStatus.EXTERNAL (not yet implemented), or RefStatus.UNRESOLVED.
-    owner_name: str | None = None  # If this is a method call, the name of the class it was called on (if known); None otherwise.
 
 @dataclass
 class CodeChunk:
