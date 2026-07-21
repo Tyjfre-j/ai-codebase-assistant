@@ -7,10 +7,9 @@ from app.core.constants import (
 from app.core.exceptions import InvalidChunkBudgetError, MalformedSourceError
 from app.ingestion.chunking.chunk_candidates import walk_top_level
 from app.ingestion.chunking.chunk_factory import (
-    build_class_skeleton_chunk,
     build_definition_chunk,
     build_file_skeleton_chunk,
-    build_function_skeleton_chunk,
+    build_skeleton_chunk,
 )
 from app.ingestion.chunking.import_metadata import extract_import_metadata
 from app.ingestion.chunking.query_captures import run_captures
@@ -29,7 +28,6 @@ def chunk_file(
 
     if budget <= 0:
         raise InvalidChunkBudgetError(f"budget must be positive, got {budget}")
-    
     if skeleton_threshold <= 0:
         raise InvalidChunkBudgetError(
             f"skeleton_threshold must be positive, got {skeleton_threshold}"
@@ -44,13 +42,10 @@ def chunk_file(
     captures = run_captures(parsed)
 
     definition_ids: set[int] = set()
-    definition_kind_by_id: dict[int, str] = {}
 
     for capture_name in DEF_CAPTURES:
         for node in captures.get(capture_name, []):
             definition_ids.add(node.id)
-            definition_kind_by_id[node.id] = capture_name
-    
     import_ids = {node.id for node in captures.get(IMPORT_CAPTURE, [])}
 
     import_text, import_ranges = extract_import_metadata(captures, parsed)
@@ -66,14 +61,14 @@ def chunk_file(
 
     if build_skeleton:
         file_skeleton = build_file_skeleton_chunk(
-            root, file_path, parsed, definition_ids, definition_kind_by_id, import_ids
+            root, file_path, parsed, definition_ids, import_ids
         )
         definition_chunks.append(file_skeleton)
         node_id_to_chunk_id[root.id] = file_skeleton.chunk_id
         file_skeleton_chunk_id = file_skeleton.chunk_id
 
     chunk_candidates = walk_top_level(
-        root, definition_ids, definition_kind_by_id, budget, file_path,
+        root, definition_ids, budget, file_path,
     )
 
     for candidate_kind, nodes, parent_node in chunk_candidates:
@@ -90,15 +85,8 @@ def chunk_file(
                 definition_chunks.append(chunk)
                 node_id_to_chunk_id[node.id] = chunk.chunk_id
 
-        elif candidate_kind == ChunkKind.CLASS_SKELETON:
-            chunk = build_class_skeleton_chunk(
-                nodes[0], file_path, parsed, captures, definition_ids, parent_chunk_id
-            )
-            definition_chunks.append(chunk)
-            node_id_to_chunk_id[nodes[0].id] = chunk.chunk_id
-
-        elif candidate_kind == ChunkKind.FUNCTION_SKELETON:
-            chunk = build_function_skeleton_chunk(
+        elif candidate_kind == ChunkKind.DEFINITION_SKELETON:
+            chunk = build_skeleton_chunk(
                 nodes[0], file_path, parsed, captures, definition_ids, parent_chunk_id
             )
             definition_chunks.append(chunk)
