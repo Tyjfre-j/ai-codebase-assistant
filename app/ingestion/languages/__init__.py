@@ -15,14 +15,21 @@ LANG_HELPERS = {
 }
 
 REQUIRED_ATTRS = (
-    "FILE_EXTENSION",
-    "get_language",
     "QUERY",
     "REF_QUERY",
-    "unwrap_decorated_definition_node",
+    "FILE_EXTENSION",
+    "get_language",
+    "get_decoration_of_definition_node",
+    "get_node_name",
+    "get_node_body",
+    "get_actual_definition_node",
+    "get_actual_definition_type",
     "get_definition_name",
-    "get_enclosing_class_name",
-    "get_module_index_filename",
+    "get_parent_class_name",
+    "get_ancestor_namespace",
+    "get_member_stub_info",
+    "get_class_header",
+    "get_class_footer",
     "is_builtin",
 )
 
@@ -33,5 +40,9 @@ for _language_name, _language_module in LANG_HELPERS.items():
     if _missing_attrs:
         raise ImportError(f"{_language_name} language module missing: {_missing_attrs}")
 
-DEF_CAPTURES = ("func.def", "class.def", "interface.def")
+FUNC_DEF_CAPTURE = "func.def"
+CLASS_DEF_CAPTURE = "class.def"
+INTERFACE_DEF_CAPTURE = "interface.def"
+
+DEF_CAPTURES = (FUNC_DEF_CAPTURE, CLASS_DEF_CAPTURE, INTERFACE_DEF_CAPTURE)
 IMPORT_CAPTURE = "import.stmt"
