@@ -1,11 +1,87 @@
 from tree_sitter import Node
 
-from app.core.exceptions import ChunkExtractionError
-from app.ingestion.code_chunk import ChunkKind, CodeChunk, RefKind
+from app.ingestion.code_chunk import ChunkKind, CodeChunk
 from app.ingestion.languages import LANG_HELPERS
 from app.ingestion.refs.extractor import extract_reference_records
 from app.ingestion.source_parser import ParsedFile
-from app.ingestion.source_text import node_text, node_text_range, stable_chunk_id
+from app.ingestion.source_text import node_text, stable_chunk_id
+
+
+def _collect_contained_symbols(
+    node: Node,
+    definition_ids: set[int],
+    language_helpers,
+    parsed: ParsedFile,
+    captures: dict[str, list[Node]],
+) -> list[str]:
+    """Full names of nested captured definitions inside `node` that were folded into this
+    chunk's code rather than emitted as their own chunk. `node` itself is excluded."""
+    contained: list[str] = []
+
+    def _walk(n: Node, is_root: bool) -> None:
+        if not is_root and n.id in definition_ids:
+            defined_in_class = language_helpers.get_enclosing_class_name(n, parsed.content)
+            name = language_helpers.get_definition_name(n, parsed.content)
+            get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
+            namespace = get_namespace(n, captures, parsed.content) if get_namespace else []
+            if namespace:
+                full_name = ".".join(namespace + [name])
+            elif defined_in_class:
+                full_name = f"{defined_in_class}.{name}"
+            else:
+                full_name = name
+            contained.append(full_name)
+        for child in n.children:
+            _walk(child, False)
+
+    _walk(node, True)
+    return contained
+
+
+def _filter_out_nested_refs(node: Node, definition_ids: set[int], all_refs: list) -> list:
+    """Keep only refs whose site is NOT inside a nested captured definition"""
+    nested_ranges: list[tuple[int, int]] = []
+
+    def _collect(n: Node, is_root: bool) -> None:
+        if not is_root and n.id in definition_ids:
+            nested_ranges.append((n.start_byte, n.end_byte))
+        for child in n.children:
+            _collect(child, False)
+
+    _collect(node, True)
+
+    def _is_nested(ref) -> bool:
+        return any(
+            nr_start <= ref.start_byte and ref.end_byte <= nr_end
+            for nr_start, nr_end in nested_ranges
+        )
+
+    return [ref for ref in all_refs if not _is_nested(ref)]
+
+
+def _render_body_lines(
+    body: Node,
+    definition_ids: set[int],
+    language_helpers,
+    parsed: ParsedFile,
+    exclude_ids: set[int] | None = None,
+) -> list[str]:
+    """Shared by definition skeletons and file skeletons: one line per direct child —
+    a signature stub for anything that got its own chunk, verbatim text otherwise."""
+    get_sig = getattr(language_helpers, "get_signature_text", None)
+    exclude_ids = exclude_ids or set()
+    lines: list[str] = []
+    for child in body.children:
+        if child.id in exclude_ids:
+            continue
+        if child.id in definition_ids:
+            stub = get_sig(child, parsed.content) if get_sig else None
+            lines.append(f"{stub}..." if stub is not None else node_text(child, parsed.content).strip())
+            continue
+        text = node_text(child, parsed.content).strip()
+        if text:
+            lines.append(text)
+    return lines
 
 
 def build_definition_chunk(
@@ -13,25 +89,26 @@ def build_definition_chunk(
     file_path: str,
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
+    definition_ids: set[int],
     parent_chunk_id: str | None = None,
 ) -> CodeChunk:
-    """Build a CodeChunk for a captured definition node."""
+    """Build a CodeChunk for a captured definition node kept in full (fits budget)."""
     language_helpers = LANG_HELPERS[parsed.language]
-    defined_in_class = language_helpers.get_enclosing_class_name(node, captures, parsed.content)
+    defined_in_class = language_helpers.get_enclosing_class_name(node, parsed.content)
     name = language_helpers.get_definition_name(node, parsed.content)
 
-    get_namespace = getattr(language_helpers, "get_namespace", None)
+    get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
     namespace = get_namespace(node, captures, parsed.content) if get_namespace else []
-
-    if namespace:
-        full_name = ".".join(namespace + [name])
-    elif defined_in_class:
-        full_name = f"{defined_in_class}.{name}"
-    else:
-        full_name = name
+    full_name = ".".join(namespace + [name]) if namespace else name
 
     code = node_text(node, parsed.content)
     references = extract_reference_records(node, parsed.content, parsed.ref_query)
+    contained_symbols = _collect_contained_symbols(
+        node, definition_ids, language_helpers, parsed, captures
+    )
+
+    get_resolved_type = getattr(language_helpers, "get_actual_definition_type", None)
+    resolved_type = get_resolved_type(node) if get_resolved_type else node.type
 
     return CodeChunk(
         chunk_id=stable_chunk_id(file_path, node.start_byte, full_name),
@@ -41,201 +118,38 @@ def build_definition_chunk(
         file_path=file_path,
         start_byte=node.start_byte,
         end_byte=node.end_byte,
+        start_line=node.start_point[0] + 1,
+        end_line=node.end_point[0] + 1,
         language=parsed.language,
         code=code,
         docstring=None,
-        node_type=node.type,
+        node_type=resolved_type,
         kind=ChunkKind.DEFINITION,
-        merged_names=None,
         size_chars=len(code),
         references=references,
         parent_chunk_id=parent_chunk_id,
+        contained_symbols=contained_symbols,
     )
 
 
-def build_leftover_code_chunk(
-    segments: list[list[Node]],
-    file_path: str,
-    parsed: ParsedFile,
-    parent_chunk_id: str | None = None,
-) -> CodeChunk:
-    """Build a CodeChunk from one or more contiguous non-definition node segments."""
-    start, end = segments[0][0].start_byte, segments[-1][-1].end_byte
-    code = "\n".join(
-        node_text_range(segment[0].start_byte, segment[-1].end_byte, parsed.content)
-        for segment in segments
-    )
-
-    return CodeChunk(
-        chunk_id=stable_chunk_id(file_path, start, f"<leftover:{start}>"),
-        full_name=f"{file_path}:leftover:{start}",
-        name="<leftover>",
-        defined_in_class=None,
-        file_path=file_path,
-        start_byte=start,
-        end_byte=end,
-        language=parsed.language,
-        code=code,
-        docstring=None,
-        node_type=None,
-        kind=ChunkKind.LEFTOVER,
-        merged_names=None,
-        size_chars=len(code),
-        parent_chunk_id=parent_chunk_id,
-    )
-
-
-def build_file_overview_chunk(
-    root: Node,
-    file_path: str,
-    parsed: ParsedFile,
-    top_level_names: list[str],
-    import_text: str,
-) -> CodeChunk:
-    """Build a lightweight per-file chunk listing imports and top-level definition names."""
-    language_helpers = LANG_HELPERS[parsed.language]
-    get_module_docstring = getattr(language_helpers, "get_module_docstring", None)
-    docstring = get_module_docstring(root, parsed.content) if get_module_docstring else None
-
-    lines = [f"# file: {file_path}"]
-    if docstring:
-        lines.append(docstring.strip())
-    if import_text:
-        lines.append("# imports:")
-        lines.append(import_text)
-    if top_level_names:
-        lines.append("# defines:")
-        lines.extend(f"#   {name}" for name in top_level_names)
-
-    code = "\n".join(lines)
-
-    return CodeChunk(
-        chunk_id=stable_chunk_id(file_path, 0, "<file_overview>"),
-        full_name=f"{file_path}:overview",
-        name="<file_overview>",
-        defined_in_class=None,
-        file_path=file_path,
-        start_byte=0,
-        end_byte=0,
-        language=parsed.language,
-        code=code,
-        docstring=None,
-        node_type=None,
-        kind=ChunkKind.FILE_OVERVIEW,
-        merged_names=None,
-        size_chars=len(code),
-        parent_chunk_id=None,
-    )
-
-
-def build_class_skeleton_chunk(
-    class_node: Node,
+def build_skeleton_chunk(
+    node: Node,
     file_path: str,
     parsed: ParsedFile,
     captures: dict[str, list[Node]],
+    definition_ids: set[int],
     parent_chunk_id: str | None = None,
 ) -> CodeChunk:
-    """Build a compact class chunk that lists all class-level code and member signatures."""
-    name_node = class_node.child_by_field_name("name")
-    class_name = node_text(name_node, parsed.content) if name_node is not None else "<unknown>"
+    """Build a skeleton chunk for any oversized definition — class, function, or interface.
+    Signature line, then one line per direct body child: a stub for anything that got
+    its own chunk, verbatim text for everything else."""
     language_helpers = LANG_HELPERS[parsed.language]
+    actual = language_helpers.get_actual_definition_node(node)
+    defined_in_class = language_helpers.get_enclosing_class_name(node, parsed.content)
+    name = language_helpers.get_definition_name(node, parsed.content)
 
-    get_namespace = getattr(language_helpers, "get_namespace", None)
-    namespace = get_namespace(class_node, captures, parsed.content) if get_namespace else []
-    if namespace:
-        full_name = ".".join(namespace + [class_name])
-    else:
-        full_name = class_name
-
-    get_header = getattr(language_helpers, "get_class_skeleton_header", None)
-    get_footer = getattr(language_helpers, "get_class_skeleton_footer", None)
-    header = get_header(class_name) if get_header else f"class {class_name}:"
-    footer = get_footer() if get_footer else None
-
-    body = class_node.child_by_field_name("body")
-    get_member_stub_info = getattr(language_helpers, "get_class_member_stub_info", None)
-
-    member_lines: list[str] = []
-    if body is not None:
-        for child in body.children:
-            # Try to render as method stub first
-            if get_member_stub_info is not None:
-                try:
-                    member_info = get_member_stub_info(child, parsed.content)
-                except Exception as e:
-                    raise ChunkExtractionError(
-                        f"Failed extracting member info for {class_name} "
-                        f"(node type={child.type}): {e}"
-                    ) from e
-
-                if member_info is not None:
-                    decorators = "".join(
-                        f"{decorator}\n    " for decorator in member_info["decorators"]
-                    )
-                    prefix = member_info["prefix"]
-                    keyword = f"{prefix} " if prefix else ""
-                    member_lines.append(
-                        f"    {decorators}{keyword}"
-                        f"{member_info['name']}{member_info['params']}: ..."
-                    )
-                    continue
-
-            # Not a method — render as class-level code (docstring, variable, etc.)
-            text = node_text(child, parsed.content).strip()
-            if text:
-                indented = "\n".join(
-                    f"    {line}" if line.strip() else line
-                    for line in text.split("\n")
-                )
-                member_lines.append(indented)
-
-    if not member_lines:
-        member_lines.append("    ...")
-
-    stub_lines = [header, *member_lines]
-    if footer is not None:
-        stub_lines.append(footer)
-
-    code = "\n".join(stub_lines)
-
-    all_refs = extract_reference_records(class_node, parsed.content, parsed.ref_query)
-    references = [ref for ref in all_refs if ref.kind == RefKind.INHERITANCE]
-
-    return CodeChunk(
-        chunk_id=stable_chunk_id(file_path, class_node.start_byte, full_name),
-        full_name=full_name,
-        name=class_name,
-        defined_in_class=None,
-        file_path=file_path,
-        start_byte=class_node.start_byte,
-        end_byte=class_node.start_byte,
-        language=parsed.language,
-        code=code,
-        docstring=None,
-        node_type=class_node.type,
-        kind=ChunkKind.CLASS_SKELETON,
-        merged_names=None,
-        size_chars=len(code),
-        references=references,
-        parent_chunk_id=parent_chunk_id,
-    )
-
-
-def build_function_skeleton_chunk(
-    func_node: Node,
-    file_path: str,
-    parsed: ParsedFile,
-    captures: dict[str, list[Node]],
-    parent_chunk_id: str | None = None,
-) -> CodeChunk:
-    """Build a compact function chunk that just lists its signature."""
-    language_helpers = LANG_HELPERS[parsed.language]
-    defined_in_class = language_helpers.get_enclosing_class_name(func_node, captures, parsed.content)
-    name = language_helpers.get_definition_name(func_node, parsed.content)
-
-    get_namespace = getattr(language_helpers, "get_namespace", None)
-    namespace = get_namespace(func_node, captures, parsed.content) if get_namespace else []
-
+    get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
+    namespace = get_namespace(node, captures, parsed.content) if get_namespace else []
     if namespace:
         full_name = ".".join(namespace + [name])
     elif defined_in_class:
@@ -243,33 +157,92 @@ def build_function_skeleton_chunk(
     else:
         full_name = name
 
-    # Handle decorated_definition wrapper for body lookup
-    body_node = func_node.child_by_field_name("body")
-    if body_node is None and func_node.type == "decorated_definition":
-        inner_def = func_node.child_by_field_name("definition")
-        if inner_def is not None:
-            body_node = inner_def.child_by_field_name("body")
+    get_sig = getattr(language_helpers, "get_signature_text", None)
+    header = get_sig(node, parsed.content) if get_sig else None
+    if header is None:
+        header = node_text(node, parsed.content)
 
-    if body_node is not None:
-        code = node_text_range(func_node.start_byte, body_node.start_byte, parsed.content) + "..."
+    body = language_helpers.get_node_body(actual)
+    lines = [header]
+    if body is not None:
+        member_lines = _render_body_lines(body, definition_ids, language_helpers, parsed)
+        if member_lines:
+            lines.extend(f"    {line}" for line in member_lines)
+        else:
+            lines.append("    ...")
     else:
-        code = node_text(func_node, parsed.content)
+        lines[0] = header + "..."
+
+    get_footer = getattr(language_helpers, "get_class_footer", None)
+    footer = get_footer() if get_footer else None
+    if footer is not None:
+        lines.append(footer)
+
+    code = "\n".join(lines)
+
+    all_refs = extract_reference_records(node, parsed.content, parsed.ref_query)
+    references = _filter_out_nested_refs(node, definition_ids, all_refs)
+
+    get_resolved_type = getattr(language_helpers, "get_actual_definition_type", None)
+    resolved_type = get_resolved_type(node) if get_resolved_type else node.type
 
     return CodeChunk(
-        chunk_id=stable_chunk_id(file_path, func_node.start_byte, full_name),
+        chunk_id=stable_chunk_id(file_path, node.start_byte, full_name),
         full_name=full_name,
         name=name,
         defined_in_class=defined_in_class,
         file_path=file_path,
-        start_byte=func_node.start_byte,
-        end_byte=func_node.start_byte,
+        start_byte=node.start_byte,
+        end_byte=node.end_byte,
+        start_line=node.start_point[0] + 1,
+        end_line=node.end_point[0] + 1,
         language=parsed.language,
         code=code,
         docstring=None,
-        node_type=func_node.type,
-        kind=ChunkKind.FUNCTION_SKELETON,
-        merged_names=None,
+        node_type=resolved_type,
+        kind=ChunkKind.DEFINITION_SKELETON,
         size_chars=len(code),
-        references=[],
+        references=references,
         parent_chunk_id=parent_chunk_id,
+    )
+
+
+def build_file_skeleton_chunk(
+    root: Node,
+    file_path: str,
+    parsed: ParsedFile,
+    definition_ids: set[int],
+    import_ids: set[int],
+) -> CodeChunk:
+    """Build a compact file chunk: all top-level non-definition, non-import content
+    verbatim, plus one signature line per top-level definition."""
+    language_helpers = LANG_HELPERS[parsed.language]
+    lines: list[str] = [f"# file: {file_path}"]
+    lines.extend(
+        _render_body_lines(root, definition_ids, language_helpers, parsed, exclude_ids=import_ids)
+    )
+
+    code = "\n".join(lines)
+
+    all_refs = extract_reference_records(root, parsed.content, parsed.ref_query)
+    references = _filter_out_nested_refs(root, definition_ids, all_refs)
+
+    return CodeChunk(
+        chunk_id=stable_chunk_id(file_path, 0, f"<file_skeleton:{file_path}>"),
+        full_name=file_path,
+        name=file_path.rsplit("/", 1)[-1],
+        defined_in_class=None,
+        file_path=file_path,
+        start_byte=0,
+        end_byte=0,
+        start_line=root.start_point[0] + 1,
+        end_line=root.end_point[0] + 1,
+        language=parsed.language,
+        code=code,
+        docstring=None,
+        node_type=None,
+        kind=ChunkKind.FILE_SKELETON,
+        size_chars=len(code),
+        references=references,
+        parent_chunk_id=None,
     )
