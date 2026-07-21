@@ -4,94 +4,172 @@ from dataclasses import dataclass, field
 class ChunkKind:
     """The canonical set of values CodeChunk.kind can take."""
 
-    DEFINITION = "definition" # A function or methods of class or interface
-    CLASS_SKELETON = "class_skeleton" # A synthetic chunk representing a class's skeleton, with no code of its own.
-    FUNCTION_SKELETON = "function_skeleton" # A synthetic chunk representing a function's skeleton, with no code of its own.
-    LEFTOVER = "leftover" # Code that doesn't fit into any other category.
-    MERGED_GROUP = "merged_group" # A group of chunks that have been merged together.
-    FILE_OVERVIEW = "file_overview" # A synthetic chunk representing the entire file, with no code of its own.
+    DEFINITION = "definition"
+    # A function, method, class, or interface member — kept in full.
+
+    DEFINITION_SKELETON = "definition_skeleton"
+    # A synthetic stub for an oversized definition (class, function, or interface).
+    # Signature line + one-liner stubs for any nested definitions that got their own chunk.
+
+    FILE_SKELETON = "file_skeleton"
+    # A synthetic chunk representing a file's top-level skeleton.
+
 
 class RefKind:
     """The values RefRecord.kind can take."""
 
-    CALL = "call" # This reference is a function or method call.
+    CALL = "call"
+    # A function or method call.
+
     INHERITANCE = "inheritance"
+    # A class or interface inheritance / extension.
+
 
 class RefStatus:
     """The values RefRecord.status can take."""
 
-    LOCAL = "local" # This reference points to a chunk defined in the same repository.
-    EXTERNAL = "external"  # Third-party or standard library imports
-    BUILTIN = "builtin"    # Language built-ins like print, len, console.log
-    UNRESOLVED = "unresolved" # This reference could not be resolved to any known chunk in the repository.
+    LOCAL = "local"
+    # Resolved to a chunk defined in the same repository.
+
+    EXTERNAL = "external"
+    # Third-party or standard-library import (unresolvable within the repo).
+
+    BUILTIN = "builtin"
+    # Language built-in like print, len, console.log.
+
+    UNRESOLVED = "unresolved"
+    # Could not be resolved to any known chunk.
+
 
 class ImportKind:
     """The values an import binding's kind can take."""
 
-    MODULE = "module"  # e.g. `import os` -> "os" binds the whole module
-    NAMED = "named"    # e.g. `from os import path` -> "path" binds one specific symbol
+    MODULE = "module"
+    # e.g. `import os` -> "os" binds the whole module.
+
+    NAMED = "named"
+    # e.g. `from os import path` -> "path" binds one specific symbol.
+
 
 @dataclass
 class RefRecord:
     """One reference (a call or an inheritance) found inside a chunk's code."""
 
-    text: str  # What was literally written at the reference site, e.g. "get_user", "self.get_user", "Base".
-    kind: str  # RefKind.CALL (this invokes something) or RefKind.INHERITANCE (this extends something).
-    points_to: str | None  # The chunk_id this reference resolves to, once we know it; None until then.
-    status: str = RefStatus.UNRESOLVED  # RefStatus.LOCAL, RefStatus.EXTERNAL (not yet implemented), or RefStatus.UNRESOLVED.
+    text: str
+    # What was literally written at the reference site, e.g. "get_user",
+    # "self.get_user", "Base".
+
+    kind: str
+    # RefKind.CALL or RefKind.INHERITANCE.
+
+    points_to: str | None = None
+    # The chunk_id this reference resolves to; None until resolved.
+
+    start_byte: int = 0
+    # Where this reference site starts in the source file.
+
+    end_byte: int = 0
+    # Where this reference site ends.
+
+    status: str = RefStatus.UNRESOLVED
+    # LOCAL, EXTERNAL, BUILTIN, or UNRESOLVED.
+
 
 @dataclass
 class CodeChunk:
-    """One retrievable piece of a source file, usually a single function, method, or class."""
+    """One retrievable piece of a source file."""
 
-    chunk_id: str  # A stable id for this chunk, used to point at it from elsewhere.
-    full_name: str  # The name including its class, e.g. "ShapeCalculator.circle_area".
-    name: str  # Just this chunk's own name, e.g. "circle_area"; "<anonymous>" or "<leftover>" if unnamed.
-    defined_in_class: str | None  # The class this lives inside, if any, e.g. "ShapeCalculator".
-    # NOTE: when defined_in_class is set, full_name == f"{defined_in_class}.{name}"
+    chunk_id: str
+    # Stable identifier used to point at this chunk from elsewhere.
 
-    file_path: str  # Which file this chunk came from.
-    start_byte: int  # Where this chunk starts in the source file.
-    end_byte: int  # Where this chunk ends; same as start_byte for empty skeleton chunks.
-    language: str  # "python", "go", "javascript", or "typescript".
+    full_name: str
+    # Fully qualified name including namespace, e.g. "ShapeCalculator.circle_area".
 
-    code: str  # The actual text of this chunk (or a synthetic stub for class skeletons).
-    docstring: str | None  # Reserved for later; always None for now.
+    name: str
+    # This chunk's own name, e.g. "circle_area"; "<anonymous>" if unnamed.
 
-    node_type: str | None  # The tree-sitter node type this came from, e.g. "function_definition".
-    kind: str  # ChunkKind.DEFINITION / CLASS_SKELETON / LEFTOVER / MERGED_GROUP -- what role this chunk plays.
-    merged_names: list[str] | None  # The original names bundled in here, if kind is ChunkKind.MERGED_GROUP.
+    defined_in_class: str | None = None
+    # The class this lives inside, if any. When set, full_name is
+    # typically f"{defined_in_class}.{name}".
 
-    size_chars: int  # How many characters of code this chunk holds.
+    file_path: str
+    # Which file this chunk came from.
 
-    parent_chunk_id: str | None = None  # chunk_id of the enclosing DEFINITION/CLASS_SKELETON/
-    # FUNCTION_SKELETON this chunk was carved out of (e.g. a LEFTOVER class field's enclosing
-    # class, or a nested def's enclosing oversized function). None for top-level chunks.
+    start_byte: int
+    # Where this chunk starts in the source file.
 
-    references: list[RefRecord] = field(default_factory=list)  # Filled in later, once refs are extracted.
+    end_byte: int
+    # Where this chunk ends. Same as start_byte for empty skeleton chunks.
+
+    start_line: int
+    # 1-indexed start line. Needed to resolve grep (file, line) hits to a chunk.
+
+    end_line: int
+    # 1-indexed end line. Same as start_line for empty skeleton chunks.
+
+    language: str
+    # "python", "go", "javascript", "typescript", etc.
+
+    code: str
+    # The actual text of this chunk, or a synthetic stub for skeletons.
+
+    docstring: str | None = None
+    # Reserved for later; always None for now.
+
+    node_type: str | None = None
+    # The tree-sitter node type, e.g. "function_definition" or "class_definition".
+
+    kind: str = ChunkKind.DEFINITION
+    # DEFINITION, DEFINITION_SKELETON, or FILE_SKELETON.
+
+    size_chars: int = 0
+    # Character count of this chunk's code.
+
+    parent_chunk_id: str | None = None
+    # chunk_id of the enclosing definition this was carved out of.
+    # None for top-level chunks.
+
+    references: list[RefRecord] = field(default_factory=list)
+    # Filled in during reference extraction and resolution.
+
+    contained_symbols: list[str] = field(default_factory=list)
+    # full_names of nested definitions folded into this chunk rather than
+    # emitted as separate chunks. Empty for leaf definitions.
 
 
 @dataclass
 class ParsedFileChunks:
-    """Everything produced by chunking one file, plus its import info for later resolution."""
+    """Everything produced by chunking one file, plus import info for resolution."""
 
-    file_path: str  # The file this came from.
-    chunks: list[CodeChunk]  # Every chunk found in this file.
-    import_text: str  # The raw text of this file's imports.
-    import_ranges: list[tuple[int, int]]  # Where each import statement sits in the file.
+    file_path: str
+    # The file this came from.
+
+    chunks: list[CodeChunk]
+    # Every chunk found in this file.
+
+    import_text: str
+    # Raw text of this file's import statements.
+
+    import_ranges: list[tuple[int, int]]
+    # Byte ranges of each import statement in the file.
+
     import_bindings: dict[str, tuple[str | None, str, str]] = field(default_factory=dict)
-    # Maps each name used in the code to (the file it actually comes from, or None; its original name).
+    # Maps each imported alias/name to (resolved_path_or_None, bound_name, import_kind).
+
 
 @dataclass
 class SkippedFile:
     """One file that didn't make it into the chunk output, and why."""
+
     file_path: str
-    reason: str  # "empty", "oversized", "binary", "minified", an OSError, or an exception class name.
+    reason: str
+    # "empty", "oversized", "binary", "minified", an OSError, or an exception class name.
 
 
 @dataclass
 class RepositoryChunkResult:
-    """Everything `chunk_repository` produces: successful per-file results plus a skip summary."""
+    """Everything `chunk_repository` produces."""
+
     files: list[ParsedFileChunks]
     skipped: list[SkippedFile]
 
