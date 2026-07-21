@@ -1,7 +1,7 @@
 import tree_sitter_python as _ts_python
 from tree_sitter import Language, Node
 
-from app.ingestion.source_text import node_text
+from app.ingestion.source_text import node_text, node_text_range
 
 QUERY = """
 (function_definition
@@ -90,6 +90,13 @@ REF_QUERY = """
 DECORATED_DEFINITION_NODE_TYPES = {"decorated_definition"}
 FUNCTION_DEFINITION_NODE_TYPES = {"function_definition"}
 CLASS_DEFINITION_NODE_TYPES = {"class_definition"}
+INTERFACE_DEFINITION_NODE_TYPES: set[str] = set()
+DEFINITION_NODE_TYPES = (
+    FUNCTION_DEFINITION_NODE_TYPES
+    | CLASS_DEFINITION_NODE_TYPES
+    | INTERFACE_DEFINITION_NODE_TYPES
+)
+
 FILE_EXTENSION = ".py"
 
 
@@ -104,10 +111,10 @@ def get_decoration_of_definition_node(def_node):
     return def_node
 
 def get_node_name(node: Node) -> Node | None:
-    return node.child_by_field_name("name")
+    return get_actual_definition_node(node).child_by_field_name("name")
 
 def get_node_body(node: Node) -> Node | None:
-    return node.child_by_field_name("body")
+    return get_actual_definition_node(node).child_by_field_name("body")
 
 def get_actual_definition_node(node):
     """Return the actual definition node, unwrapping decorators if needed."""
@@ -128,17 +135,15 @@ def get_definition_name(node, content: bytes) -> str:
         return "<anonymous>"
     return node_text(name_node, content)
 
-
-def get_parent_class_name(def_node, captures: dict, content: bytes) -> str | None:
-    """Return the name of the immediate enclosing class, if any.
-    Returns None for top-level functions or nested functions inside functions."""
-    parent = def_node.parent
-    if parent is not None and parent.type == "block":
-        grandparent = parent.parent
-        if grandparent is not None and grandparent.type in CLASS_DEFINITION_NODE_TYPES:
-            name_node = grandparent.child_by_field_name("name")
+def get_enclosing_class_name(def_node, content: bytes) -> str | None:
+    """Walk up the AST to find the nearest enclosing class name."""
+    current = def_node.parent
+    while current is not None:
+        if current.type in CLASS_DEFINITION_NODE_TYPES:
+            name_node = current.child_by_field_name("name")
             if name_node is not None:
                 return node_text(name_node, content)
+        current = current.parent
     return None
 
 def get_ancestor_namespace(def_node, captures: dict, content: bytes) -> list[str]:
@@ -154,48 +159,21 @@ def get_ancestor_namespace(def_node, captures: dict, content: bytes) -> list[str
         current = current.parent
     return list(reversed(namespace))
 
-def _collect_decorators(node, content: bytes) -> list[str]:
-    """Return source text of all decorators on a decorated_definition wrapper, or []."""
-    if node.type not in DECORATED_DEFINITION_NODE_TYPES:
-        return []
-    return [
-        node_text(child, content)
-        for child in node.children
-        if child.type == "decorator"
-    ]
-
-def get_member_stub_info(node, content: bytes):
-    """Return a stub signature dict for methods and nested classes inside a class body.
-    
-    Returns None for plain statements (variables, docstrings) so the caller renders
-    them verbatim. Used by build_class_skeleton_chunk to render one-line stubs.
-    """
+def get_signature_text(node, content: bytes) -> str | None:
+    """Raw source text from node's true start (decorators included) up to
+    where its body begins. Works for functions, classes, interfaces, any
+    nesting depth. Returns None if node isn't a definition at all."""
     actual = get_actual_definition_node(node)
-    decorators = _collect_decorators(node, content)
-
-    if actual.type in FUNCTION_DEFINITION_NODE_TYPES:
-        name = node_text(actual.child_by_field_name("name"), content)
-        params = node_text(actual.child_by_field_name("parameters"), content)
-        is_async = any(child.type == "async" for child in actual.children)
-        prefix = "async def" if is_async else "def"
-        return {"name": name, "params": params, "decorators": decorators, "prefix": prefix}
-
-    if actual.type in CLASS_DEFINITION_NODE_TYPES:
-        name = node_text(actual.child_by_field_name("name"), content)
-        return {"name": name, "params": "", "decorators": decorators, "prefix": "class"}
-
-    return None
-
-
-def get_class_header(name: str) -> str:
-    """Return the opening line for a class skeleton (e.g. 'class Foo:')."""
-    return f"class {name}:"
-
+    if actual.type not in DEFINITION_NODE_TYPES:
+        return None
+    body = get_node_body(actual)
+    if body is None:
+        return node_text(node, content).rstrip()
+    return node_text_range(node.start_byte, body.start_byte, content).rstrip()
 
 def get_class_footer() -> str | None:
     """Return the closing line for a class skeleton, or None if not needed."""
     return None
-
 
 def get_package_index_filename() -> str | None:
     """Return the filename that marks a package directory, or None."""
