@@ -16,12 +16,12 @@ QUERY = """
 (import_statement
   name: (dotted_name
     . (identifier) @import.bound_name
-  ) @import.module
+  ) @import.direct_module        
 ) @import.stmt
 
 (import_statement
   name: (aliased_import
-    name: (dotted_name) @import.module
+    name: (dotted_name) @import.direct_module   
     alias: (identifier) @import.bound_name
   )
 ) @import.stmt
