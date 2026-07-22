@@ -32,4 +32,11 @@ GIT_CLONE_FLAGS = ["--depth=1", "--no-tags", "--config", "core.hooksPath=/dev/nu
 CLONE_ERROR_MESSAGE_MAX_CHARS = 300
 
 DEFAULT_MAX_FILE_SIZE_MB = 5
-DEFAULT_CHUNK_BUDGET_CHARS = 1500
+
+# Small — controls whether a file is even worth producing a skeleton overview for.
+# Kept low: skeletons should stay cheap and common regardless of LLM context size.
+DEFAULT_FILE_SKELETON_THRESHOLD_CHARS = 200
+
+# Large — controls whether an individual definition gets inlined whole or
+# needs skeleton+recurse. Tied to LLM context economics, not embedding-sized chunks.
+DEFAULT_CHUNK_INCLUSION_BUDGET_CHARS = 4000  # tune to your target model's context
