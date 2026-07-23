@@ -20,7 +20,7 @@ def _resolve(fake_path, source, def_name):
     captures = run_captures(parsed)
     node = _find_def_by_name(parsed, captures, def_name)
     helpers = LANG_HELPERS[parsed.language]
-    return helpers.get_enclosing_class_name(node, captures, parsed.content)
+    return helpers.get_enclosing_class_name(node, parsed.content)
 
 
 PYTHON_CASES = [
