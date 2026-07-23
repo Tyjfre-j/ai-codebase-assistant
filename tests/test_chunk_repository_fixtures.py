@@ -13,8 +13,8 @@ FIXTURES_ROOT = "tests/fixtures"
 ])
 def test_chunk_repository_produces_definition_chunks(language, expected_ext):
     results = chunk_repository(f"{FIXTURES_ROOT}/{language}")
-    assert len(results.files) == 1, f"expected exactly one file parsed for {language}"
-    parsed_chunks = results.files[0]
+    assert len(results.files) >= 1, f"expected at least one file parsed for {language}"
+    parsed_chunks = next(f for f in results.files if f.file_path.endswith(f"sample{expected_ext}"))
     assert parsed_chunks.file_path.endswith(expected_ext)
     definition_chunks = [c for c in parsed_chunks.chunks if c.kind == "definition"]
     assert len(definition_chunks) > 0, f"expected at least one definition chunk for {language}"
@@ -22,35 +22,34 @@ def test_chunk_repository_produces_definition_chunks(language, expected_ext):
 
 def test_python_fixture_has_expected_symbols():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results.files[0]
+    parsed_chunks = next(f for f in results.files if f.file_path.endswith("sample.py"))
 
     all_symbol_names = {c.name for c in parsed_chunks.chunks}
     definition_symbol_names = {c.name for c in parsed_chunks.chunks if c.kind == "definition"}
 
-    # ShapeCalculator has methods, so the class itself becomes a class_skeleton chunk,
-    # not a "definition" -- its methods are the definition chunks, each carrying
-    # defined_in_class == "ShapeCalculator".
-    assert "ShapeCalculator" in all_symbol_names
+    # ShapeCalculator is small enough to fit in the budget, so it becomes a "definition" chunk,
+    # and its methods are NOT separate chunks but contained_symbols.
+    assert "ShapeCalculator" in definition_symbol_names
     assert "standalone_helper" in definition_symbol_names
-    assert "circle_area" in definition_symbol_names
+    assert "circle_area" not in definition_symbol_names
 
-    circle_area_chunk = next(c for c in parsed_chunks.chunks if c.name == "circle_area")
-    assert circle_area_chunk.defined_in_class == "ShapeCalculator"
+    shape_calc_chunk = next(c for c in parsed_chunks.chunks if c.name == "ShapeCalculator")
+    assert "ShapeCalculator.circle_area" in shape_calc_chunk.contained_symbols
 
 
 def test_python_fixture_refs_have_ref_kind_set():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results.files[0]
+    parsed_chunks = next(f for f in results.files if f.file_path.endswith("sample.py"))
     all_refs = [ref for c in parsed_chunks.chunks for ref in c.references]
     assert len(all_refs) > 0
     for ref in all_refs:
         assert ref.kind in ("call", "inheritance")
-        assert ref.status in ("unresolved", "builtin", "external")
+        assert ref.status in ("unresolved", "builtin", "external", "local")
 
 
 def test_python_fixture_standalone_helper_calls_os_path_exists():
     results = chunk_repository(f"{FIXTURES_ROOT}/python")
-    parsed_chunks = results.files[0]
+    parsed_chunks = next(f for f in results.files if f.file_path.endswith("sample.py"))
     helper_chunk = next(
         c for c in parsed_chunks.chunks
         if c.kind == "definition" and c.name == "standalone_helper"
@@ -72,8 +71,8 @@ def test_python_class_skeleton_captures_inheritance_reference():
 
     parser = CodeParser()
     parsed = parser.parse_file("sample.py", parser_source.encode("utf-8"))
-    chunks, _, _, _ = chunk_file("sample.py", parsed)
+    chunks, _, _, _ = chunk_file("sample.py", parsed, budget=50)
 
-    skeleton = next(c for c in chunks if c.kind == "class_skeleton" and c.name == "Child")
+    skeleton = next(c for c in chunks if c.kind == "definition_skeleton" and c.name == "Child")
     assert [ref.kind for ref in skeleton.references] == ["inheritance"]
     assert [ref.text for ref in skeleton.references] == ["Base"]
