@@ -61,7 +61,7 @@ def chunk_file(
 
     if build_skeleton:
         file_skeleton = build_file_skeleton_chunk(
-            root, file_path, parsed, definition_ids, import_ids
+            root, file_path, parsed, definition_ids
         )
         definition_chunks.append(file_skeleton)
         node_id_to_chunk_id[root.id] = file_skeleton.chunk_id
