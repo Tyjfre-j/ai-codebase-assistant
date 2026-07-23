@@ -22,8 +22,7 @@ def _collect_contained_symbols(
         if not is_root and n.id in definition_ids:
             defined_in_class = language_helpers.get_enclosing_class_name(n, parsed.content)
             name = language_helpers.get_definition_name(n, parsed.content)
-            get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
-            namespace = get_namespace(n, captures, parsed.content) if get_namespace else []
+            namespace = language_helpers.get_ancestor_namespace(n, captures, parsed.content)
             if namespace:
                 full_name = ".".join(namespace + [name])
             elif defined_in_class:
@@ -68,14 +67,14 @@ def _render_body_lines(
 ) -> list[str]:
     """Shared by definition skeletons and file skeletons: one line per direct child —
     a signature stub for anything that got its own chunk, verbatim text otherwise."""
-    get_sig = getattr(language_helpers, "get_signature_text", None)
+    get_sig = language_helpers.get_signature_text
     exclude_ids = exclude_ids or set()
     lines: list[str] = []
     for child in body.children:
         if child.id in exclude_ids:
             continue
         if child.id in definition_ids:
-            stub = get_sig(child, parsed.content) if get_sig else None
+            stub = get_sig(child, parsed.content)
             lines.append(f"{stub}..." if stub is not None else node_text(child, parsed.content).strip())
             continue
         text = node_text(child, parsed.content).strip()
@@ -97,9 +96,13 @@ def build_definition_chunk(
     defined_in_class = language_helpers.get_enclosing_class_name(node, parsed.content)
     name = language_helpers.get_definition_name(node, parsed.content)
 
-    get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
-    namespace = get_namespace(node, captures, parsed.content) if get_namespace else []
-    full_name = ".".join(namespace + [name]) if namespace else name
+    namespace = language_helpers.get_ancestor_namespace(node, captures, parsed.content)
+    if namespace:
+        full_name = ".".join(namespace + [name])
+    elif defined_in_class:
+        full_name = f"{defined_in_class}.{name}"
+    else:
+        full_name = name
 
     code = node_text(node, parsed.content)
     references = extract_reference_records(node, parsed.content, parsed.ref_query)
@@ -107,8 +110,7 @@ def build_definition_chunk(
         node, definition_ids, language_helpers, parsed, captures
     )
 
-    get_resolved_type = getattr(language_helpers, "get_actual_definition_type", None)
-    resolved_type = get_resolved_type(node) if get_resolved_type else node.type
+    resolved_type = language_helpers.get_actual_definition_type(node)
 
     return CodeChunk(
         chunk_id=stable_chunk_id(file_path, node.start_byte, full_name),
@@ -122,7 +124,6 @@ def build_definition_chunk(
         end_line=node.end_point[0] + 1,
         language=parsed.language,
         code=code,
-        docstring=None,
         node_type=resolved_type,
         kind=ChunkKind.DEFINITION,
         size_chars=len(code),
@@ -148,8 +149,7 @@ def build_skeleton_chunk(
     defined_in_class = language_helpers.get_enclosing_class_name(node, parsed.content)
     name = language_helpers.get_definition_name(node, parsed.content)
 
-    get_namespace = getattr(language_helpers, "get_ancestor_namespace", None)
-    namespace = get_namespace(node, captures, parsed.content) if get_namespace else []
+    namespace = language_helpers.get_ancestor_namespace(node, captures, parsed.content)
     if namespace:
         full_name = ".".join(namespace + [name])
     elif defined_in_class:
@@ -157,8 +157,7 @@ def build_skeleton_chunk(
     else:
         full_name = name
 
-    get_sig = getattr(language_helpers, "get_signature_text", None)
-    header = get_sig(node, parsed.content) if get_sig else None
+    header = language_helpers.get_signature_text(node, parsed.content)
     if header is None:
         header = node_text(node, parsed.content)
 
@@ -173,8 +172,7 @@ def build_skeleton_chunk(
     else:
         lines[0] = header + "..."
 
-    get_footer = getattr(language_helpers, "get_class_footer", None)
-    footer = get_footer() if get_footer else None
+    footer = language_helpers.get_class_footer()
     if footer is not None:
         lines.append(footer)
 
@@ -183,8 +181,7 @@ def build_skeleton_chunk(
     all_refs = extract_reference_records(node, parsed.content, parsed.ref_query)
     references = _filter_out_nested_refs(node, definition_ids, all_refs)
 
-    get_resolved_type = getattr(language_helpers, "get_actual_definition_type", None)
-    resolved_type = get_resolved_type(node) if get_resolved_type else node.type
+    resolved_type = language_helpers.get_actual_definition_type(node)
 
     return CodeChunk(
         chunk_id=stable_chunk_id(file_path, node.start_byte, full_name),
@@ -198,7 +195,6 @@ def build_skeleton_chunk(
         end_line=node.end_point[0] + 1,
         language=parsed.language,
         code=code,
-        docstring=None,
         node_type=resolved_type,
         kind=ChunkKind.DEFINITION_SKELETON,
         size_chars=len(code),
@@ -239,7 +235,6 @@ def build_file_skeleton_chunk(
         end_line=root.end_point[0] + 1,
         language=parsed.language,
         code=code,
-        docstring=None,
         node_type=None,
         kind=ChunkKind.FILE_SKELETON,
         size_chars=len(code),
