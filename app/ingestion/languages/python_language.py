@@ -187,6 +187,23 @@ def get_package_index_filename() -> str | None:
 # by the exact file/path given, never to a differently-named nested file.
 ALLOWS_SUBMODULE_IMPORTS = True
 
+SELF_REFERENCE_NAMES = {"self", "cls"}
+
+def parse_relative_module(module_text: str) -> tuple[int, str]:
+    """Python relative imports are contiguous leading dots followed by an optional
+    dotted path: '.foo.bar' -> same-dir 'foo/bar'; '..foo' -> one dir up, 'foo';
+    '...' -> two dirs up, no remainder. One leading dot means 'this package',
+    so levels-to-climb is dots - 1."""
+    dots = len(module_text) - len(module_text.lstrip("."))
+    remainder = module_text[dots:]
+    if remainder:
+        remainder = remainder.replace(".", "/")
+    return dots - 1, remainder
+
+def module_text_to_path_segment(module_text: str) -> str:
+    """Python absolute imports are dotted ('a.b.c'); convert to a path fragment."""
+    return module_text.replace(".", "/")
+
 BUILTINS = {
     "abs", "all", "any", "ascii", "bin", "bool", "bytearray", "bytes", "callable", "chr",
     "classmethod", "compile", "complex", "delattr", "dict", "dir", "divmod", "enumerate",
