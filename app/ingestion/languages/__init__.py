@@ -1,5 +1,6 @@
-# app/ingestion/languages/__init__.py
 """Language query/helper registry used by the ingestion parser and chunker."""
+
+from typing import cast
 
 from app.ingestion.languages import (
     go_language,
@@ -8,8 +9,6 @@ from app.ingestion.languages import (
     typescript_language,
 )
 from app.ingestion.languages.protocol import LanguageModule
-
-from typing import cast
 
 LANG_HELPERS: dict[str, LanguageModule] = {
     "python": cast(LanguageModule, python_language),
@@ -23,6 +22,7 @@ _REQUIRED_ATTRS = (
     "REF_QUERY",
     "FILE_EXTENSION",
     "ALLOWS_SUBMODULE_IMPORTS",
+    "SELF_REFERENCE_NAMES",
     "DECORATED_DEFINITION_NODE_TYPES",
     "FUNCTION_DEFINITION_NODE_TYPES",
     "CLASS_DEFINITION_NODE_TYPES",
@@ -44,6 +44,7 @@ _REQUIRED_CALLABLES = (
     "get_package_index_filename",
     "is_builtin",
 )
+
 for _language_name, _language_module in LANG_HELPERS.items():
     _missing_attrs = [
         attr for attr in _REQUIRED_ATTRS if not hasattr(_language_module, attr)
