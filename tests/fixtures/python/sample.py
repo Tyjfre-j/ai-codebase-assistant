@@ -31,6 +31,13 @@ class ShapeCalculator:
         _validate(height)
         return width * height
 
+    def total_area(self, radius: float, side: float, width: float, height: float) -> float:
+        return (
+            self.circle_area(radius)
+            + self.square_area(side)
+            + self.rectangle_area(width, height)
+        )
+
 
 def standalone_helper(path: str) -> bool:
     return os.path.exists(path)
