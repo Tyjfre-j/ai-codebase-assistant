@@ -70,7 +70,7 @@ def run(root: str) -> None:
                     suspicious.append((pc.file_path, c.name, ref.text))
 
     print(f"Unresolved refs whose root matches a KNOWN symbol name: {len(suspicious)}")
-    for entry in suspicious[:30]:
+    for entry in suspicious:
         print(entry)
         
 if __name__ == "__main__":
