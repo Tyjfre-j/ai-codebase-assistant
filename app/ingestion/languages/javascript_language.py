@@ -77,22 +77,44 @@ REF_QUERY = """
   )
 )
 
+(new_expression
+  constructor: (identifier) @reference.call
+)
+
 (class_heritage
   (identifier) @reference.base_class
 )
 """
 
-CLASS_NODE_TYPES = {"class_declaration"}
+CLASS_DEFINITION_NODE_TYPES = {"class_declaration"}
+DECORATED_DEFINITION_NODE_TYPES: set[str] = set()
+FUNCTION_DEFINITION_NODE_TYPES = {"function_declaration", "method_definition", "variable_declarator", "field_definition"}
+INTERFACE_DEFINITION_NODE_TYPES: set[str] = set()
 _FIELD_DEFINITION_TYPE = "field_definition"
 FILE_EXTENSION = ".js"
+ALLOWS_SUBMODULE_IMPORTS = False
+
+SELF_REFERENCE_NAMES = {"this"}
 
 
 def get_language() -> Language:
     return Language(_ts_javascript.language())  
 
-def unwrap_decorated_definition_node(def_node):
+def get_decoration_of_definition_node(def_node):
     """JS has no decorator-wrapper node equivalent to Python's — nothing to unwrap."""
     return def_node
+
+def get_node_name(node):
+    return get_actual_definition_node(node).child_by_field_name("name") or get_actual_definition_node(node).child_by_field_name("property")
+
+def get_node_body(node):
+    return get_actual_definition_node(node).child_by_field_name("body")
+
+def get_actual_definition_node(node):
+    return node
+
+def get_actual_definition_type(node) -> str:
+    return node.type
 
 
 def _unwrap_arrow_field(definition_node):
@@ -115,7 +137,7 @@ def get_definition_name(node, content: bytes) -> str:
     return node_text(name_node, content)
 
 
-def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
+def get_enclosing_class_name(def_node, content: bytes) -> str | None:
     """Return the owning class for JS methods and class-field arrow functions."""
     definition_node = _unwrap_arrow_field(def_node)
 
@@ -133,7 +155,7 @@ def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | 
     return node_text(name_node, content)
 
 
-def get_namespace(def_node, captures: dict, content: bytes) -> list[str]:
+def get_ancestor_namespace(def_node, captures: dict, content: bytes) -> list[str]:
     """Walk up the AST and return the full namespace path."""
     namespace = []
     current = def_node.parent
@@ -193,11 +215,21 @@ def get_class_member_stub_info(node, content: bytes):
 def get_class_skeleton_header(name: str) -> str:
     return f"class {name} {{"
 
-def get_class_skeleton_footer() -> str | None:
+def get_class_footer() -> str | None:
     return "}"
 
-def get_module_index_filename() -> str | None:
+def get_package_index_filename() -> str | None:
     return "index.js"
+
+def get_signature_text(node, content: bytes) -> str | None:
+    """Return signature text up to the body"""
+    actual = get_actual_definition_node(node)
+    body = get_node_body(actual)
+    if body is None:
+        from app.ingestion.source_text import node_text
+        return node_text(node, content).rstrip()
+    from app.ingestion.source_text import node_text_range
+    return node_text_range(node.start_byte, body.start_byte, content).rstrip()
 
 BUILTINS = {
     "console", "Math", "JSON", "Object", "Array", "String", "Number", "Boolean",
