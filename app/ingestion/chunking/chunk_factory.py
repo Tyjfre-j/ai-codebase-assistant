@@ -208,14 +208,13 @@ def build_file_skeleton_chunk(
     file_path: str,
     parsed: ParsedFile,
     definition_ids: set[int],
-    import_ids: set[int],
 ) -> CodeChunk:
-    """Build a compact file chunk: all top-level non-definition, non-import content
-    verbatim, plus one signature line per top-level definition."""
+    """Build a compact file chunk: all top-level non-definition content verbatim,
+    plus one signature line per top-level definition. Imports are retained."""
     language_helpers = LANG_HELPERS[parsed.language]
     lines: list[str] = [f"# file: {file_path}"]
     lines.extend(
-        _render_body_lines(root, definition_ids, language_helpers, parsed, exclude_ids=import_ids)
+        _render_body_lines(root, definition_ids, language_helpers, parsed)
     )
 
     code = "\n".join(lines)
