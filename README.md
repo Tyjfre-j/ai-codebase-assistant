@@ -38,8 +38,6 @@ app/
       query_captures.py           Runs Tree-sitter queries and groups captures.
       chunk_candidates.py         Walks the syntax tree into chunk candidates.
       chunk_factory.py            Builds `CodeChunk` objects.
-      definition_merger.py        Merges adjacent small definitions.
-      leftover_chunks.py          Groups imports and non-definition code.
 tests/
   fixtures/                       Sample files used by ingestion tests.
 ```
@@ -66,11 +64,10 @@ command or service.
 `chunk_file()` returns:
 
 ```python
-chunks, import_text, import_ranges = chunk_file(file_path, parsed_file)
+chunks, import_text, import_ranges, captures = chunk_file(file_path, parsed_file)
 ```
 
-- `chunks`: `CodeChunk` objects for definitions, class skeletons, merged
-  definition groups, and leftover source code.
+- `chunks`: `CodeChunk` objects for definitions, and skeletons.
 - `import_text`: import statements concatenated separately from chunks.
 - `import_ranges`: byte ranges for imports in the original source file.
 
@@ -102,7 +99,7 @@ incremental indexing step.
 `CodeChunk` is the main data model emitted by chunking. Important fields:
 
 - `chunk_id`: stable identifier for indexing and lookup.
-- `full_name`: full symbol path, or synthetic leftover name.
+- `full_name`: full symbol path.
 - `name`: bare symbol name.
 - `defined_in_class`: enclosing class or struct when resolved.
 - `file_path`: source file path.
@@ -110,8 +107,7 @@ incremental indexing step.
 - `language`: parsed language name.
 - `code`: source text or synthetic skeleton text.
 - `node_type`: Tree-sitter node type.
-- `kind`: `definition`, `leftover`, `merged_group`, or `class_skeleton`.
-- `merged_names`: original names included in a merged chunk.
+- `kind`: `definition`, `definition_skeleton`, or `file_skeleton`.
 - `references`: raw reference records extracted from definition and class
   skeleton chunks; each record starts unresolved and may be linked to a target
   chunk later.
@@ -157,7 +153,6 @@ See the `docs/` folder for deeper architectural details:
 
 - No production ingest service yet wires clone, scan, validate, parse, chunk, embed, and store into one flow (currently tested via `app/main.py` CLI).
 - Embedding generation and vector storage are not wired to chunking yet.
-- Chunk output is returned as definitions first and leftovers second, not sorted globally by source order.
 - `docstring` exists on `CodeChunk` but is currently always `None`.
 
 ## Next Steps
