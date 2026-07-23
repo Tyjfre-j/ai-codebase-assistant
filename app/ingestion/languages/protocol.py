@@ -8,6 +8,7 @@ class LanguageModule(Protocol):
     REF_QUERY: str
     FILE_EXTENSION: str
     ALLOWS_SUBMODULE_IMPORTS: bool
+    SELF_REFERENCE_NAMES: set[str]
 
     DECORATED_DEFINITION_NODE_TYPES: set[str]
     FUNCTION_DEFINITION_NODE_TYPES: set[str]
