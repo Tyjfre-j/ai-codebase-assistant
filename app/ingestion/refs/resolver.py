@@ -25,7 +25,8 @@ def resolve_reference(
 
     if "." in text:
         parts = text.split(".")
-        prefix = parts[0]
+        clean_parts = [p.split("(")[0].split("[")[0] for p in parts]
+        prefix = clean_parts[0]
 
         if prefix in self_reference_names:
             class_name = origin_chunk.defined_in_class
@@ -34,45 +35,50 @@ def resolve_reference(
                 class_name = origin_chunk.full_name
 
             if class_name:
-                qualified = ".".join([class_name] + parts[1:])
-                chunk_id = symbol_index.by_full_name.get((file_path, qualified))
-                if chunk_id:
-                    return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
+                for i in range(len(clean_parts), 0, -1):
+                    qualified = ".".join([class_name] + clean_parts[1:i])
+                    chunk_id = symbol_index.by_full_name.get((file_path, qualified))
+                    if chunk_id:
+                        return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
-        local_qualified = ".".join(parts)
-        chunk_id = symbol_index.by_full_name.get((file_path, local_qualified))
-        if chunk_id:
-            return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
+        for i in range(len(clean_parts), 0, -1):
+            local_qualified = ".".join(clean_parts[:i])
+            chunk_id = symbol_index.by_full_name.get((file_path, local_qualified))
+            if chunk_id:
+                return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
         binding = import_bindings.get(prefix)
         if binding:
             if binding.resolved_path is None:
                 return replace(ref, points_to=None, status=RefStatus.EXTERNAL)
 
-            remaining = parts[1 + binding.extra_segments:]
+            remaining = clean_parts[1 + binding.extra_segments:]
             if binding.kind == ImportKind.MODULE:
-                if remaining:
-                    qualified = ".".join(remaining)
+                for i in range(len(remaining), 0, -1):
+                    qualified = ".".join(remaining[:i])
                     chunk_id = symbol_index.by_full_name.get((binding.resolved_path, qualified))
                     if chunk_id:
                         return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
             else:
-                qualified = ".".join([binding.remote_name] + remaining)
-                chunk_id = symbol_index.by_full_name.get((binding.resolved_path, qualified))
-                if chunk_id:
-                    return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
+                for i in range(len(remaining), -1, -1):
+                    qualified = ".".join([binding.remote_name] + remaining[:i])
+                    chunk_id = symbol_index.by_full_name.get((binding.resolved_path, qualified))
+                    if chunk_id:
+                        return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
         return replace(ref, points_to=None, status=RefStatus.UNRESOLVED)
 
-    chunk_id = symbol_index.by_full_name.get((file_path, text))
+    clean_text = text.split("(")[0].split("[")[0]
+
+    chunk_id = symbol_index.by_full_name.get((file_path, clean_text))
     if chunk_id:
         return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
-    candidates = symbol_index.by_simple_name.get((file_path, text))
+    candidates = symbol_index.by_simple_name.get((file_path, clean_text))
     if candidates:
         return replace(ref, points_to=candidates[0], status=RefStatus.LOCAL)
 
-    binding = import_bindings.get(text)
+    binding = import_bindings.get(clean_text)
     if binding:
         if binding.resolved_path is None:
             return replace(ref, points_to=None, status=RefStatus.EXTERNAL)
@@ -81,11 +87,11 @@ def resolve_reference(
             return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
     for module_path in wildcard_import_modules:
-        chunk_id = symbol_index.by_full_name.get((module_path, text))
+        chunk_id = symbol_index.by_full_name.get((module_path, clean_text))
         if chunk_id:
             return replace(ref, points_to=chunk_id, status=RefStatus.LOCAL)
 
-    if text in builtin_names:
+    if clean_text in builtin_names:
         return replace(ref, points_to=None, status=RefStatus.BUILTIN)
 
     return replace(ref, points_to=None, status=RefStatus.UNRESOLVED)
