@@ -63,8 +63,12 @@ REF_QUERY = """
 )
 """
 
-CLASS_NODE_TYPES: set[str] = set()
+CLASS_DEFINITION_NODE_TYPES = {"type_declaration"}
+DECORATED_DEFINITION_NODE_TYPES: set[str] = set()
+FUNCTION_DEFINITION_NODE_TYPES = {"function_declaration", "method_declaration"}
+INTERFACE_DEFINITION_NODE_TYPES = {"type_declaration"}
 FILE_EXTENSION = ".go"
+ALLOWS_SUBMODULE_IMPORTS = True
 
 # Go import paths are already slash-separated (e.g. "os/exec"), unlike
 # Python's dotted module names, and can legitimately contain literal dots in
@@ -76,13 +80,41 @@ PATH_USES_DOTS = False
 # files, never to one file named after the import path.
 RESOLVES_IMPORT_TO_DIRECTORY = True
 
+SELF_REFERENCE_NAMES: set[str] = set()
+
 
 def get_language() -> Language:
     return Language(_ts_go.language())
 
-def unwrap_decorated_definition_node(def_node):
+def get_decoration_of_definition_node(def_node):
     """Return Go definitions as-is because Go has no decorator wrapper."""
     return def_node  # no decorator-equivalent wrapper in Go
+
+def get_node_name(node):
+    if node.type == "type_declaration":
+        type_spec = next((child for child in node.children if child.type == "type_spec"), None)
+        if type_spec is not None:
+            return type_spec.child_by_field_name("name")
+    return node.child_by_field_name("name")
+
+def get_node_body(node):
+    # For function/method declarations, the body is a direct field.
+    body = node.child_by_field_name("body")
+    if body is not None:
+        return body
+    # For type_declaration, the actual struct/interface body is nested inside
+    # the type_spec child (e.g. type_spec → struct_type or interface_type).
+    if node.type == "type_declaration":
+        type_spec = next((child for child in node.children if child.type == "type_spec"), None)
+        if type_spec is not None:
+            return type_spec.child_by_field_name("type")
+    return None
+
+def get_actual_definition_node(node):
+    return node
+
+def get_actual_definition_type(node) -> str:
+    return node.type
 
 
 def get_definition_name(node, content: bytes) -> str:
@@ -102,7 +134,7 @@ def get_definition_name(node, content: bytes) -> str:
     return node_text(name_node, content)
 
 
-def get_enclosing_class_name(def_node, captures: dict, content: bytes) -> str | None:
+def get_enclosing_class_name(def_node, content: bytes) -> str | None:
     """Return the receiver type name for Go methods."""
     if def_node.type != "method_declaration":
         return None
@@ -136,8 +168,24 @@ def get_class_member_stub_info(node, content: bytes):
     """Return no class member stubs because Go methods are not tree-nested."""
     return None
 
-def get_module_index_filename() -> str | None:
+def get_class_footer() -> str | None:
     return None
+
+def get_package_index_filename() -> str | None:
+    return None
+
+def get_ancestor_namespace(def_node, captures: dict, content: bytes) -> list[str]:
+    """Go doesn't have nested definitions in the same way, return empty namespace."""
+    return []
+
+def get_signature_text(node, content: bytes) -> str | None:
+    """Return signature text up to the body"""
+    body = get_node_body(node)
+    if body is None:
+        from app.ingestion.source_text import node_text
+        return node_text(node, content).rstrip()
+    from app.ingestion.source_text import node_text_range
+    return node_text_range(node.start_byte, body.start_byte, content).rstrip()
 
 
 def derive_import_bound_name(module_text: str) -> str:
