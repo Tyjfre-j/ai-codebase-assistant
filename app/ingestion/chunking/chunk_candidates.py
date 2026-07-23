@@ -32,14 +32,11 @@ def _classify_definition(
 
     has_nested = any(_contains_definition(c, definition_ids, memo) for c in node.children)
 
-    # Oversized with nested definitions → skeleton + recurse into children.
-    # Applies uniformly to classes, functions, and interfaces.
     if has_nested:
         return [(ChunkKind.DEFINITION_SKELETON, [node], enclosing_def_node)] + _walk_children(
             node, definition_ids, budget, memo, node, file_path
         )
 
-    # Oversized leaf — keep whole anyway (nothing to extract)
     return [(ChunkKind.DEFINITION, [node], enclosing_def_node)]
 
 
