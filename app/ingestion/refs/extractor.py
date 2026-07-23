@@ -28,6 +28,8 @@ def extract_reference_records(
             text=node_text(call_node, content),
             kind=RefKind.CALL,
             points_to=None,
+            start_byte=call_node.start_byte,
+            end_byte=call_node.end_byte,
         ))
 
     attribute_pairs: dict[tuple[int, int], dict[str, Node]] = {}
@@ -44,13 +46,15 @@ def extract_reference_records(
         key = (parent.start_byte, parent.end_byte)
         attribute_pairs.setdefault(key, {})["attr"] = attr_node
 
-    for pair in attribute_pairs.values():
+    for key, pair in attribute_pairs.items():
         if "object" in pair and "attr" in pair:
             text = f"{node_text(pair['object'], content)}.{node_text(pair['attr'], content)}"
             references.append(RefRecord(
                 text=text,
                 kind=RefKind.CALL,
                 points_to=None,
+                start_byte=key[0],
+                end_byte=key[1],
             ))
 
     for base_class_node in captures_by_name.get("reference.base_class", []):
@@ -58,6 +62,8 @@ def extract_reference_records(
             text=node_text(base_class_node, content),
             kind=RefKind.INHERITANCE,
             points_to=None,
+            start_byte=base_class_node.start_byte,
+            end_byte=base_class_node.end_byte,
         ))
 
     return references
